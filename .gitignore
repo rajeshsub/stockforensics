@@ -1,0 +1,7 @@
+design-samples/
+plan-v1-original.md
+plan.md
+
+# secrets
+python/.env
+frontend/.env

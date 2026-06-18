@@ -1,0 +1,60 @@
+"""Per-company qualitative synthesis (Q5, Q17). RAG over SEC filings (chunk ->
+embed -> Pinecone -> retrieve) for filing-grounded context, plus Gemini's built-in
+google_search grounding for fresh web/news. One grounded LLM call returns the agent
+contract; code (not the LLM) later thresholds the promoter findings into the score."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from app.adapters.protocols import VectorItem
+from app.agent.contract import validate_agent_output
+from app.rag.chunk import chunk_filings
+
+if TYPE_CHECKING:
+    from app.core.clients import Adapters
+
+RETRIEVAL_QUERY = (
+    "executive integrity, CEO tenure, public-company experience, SEC enforcement "
+    "actions, criminal record, related-party transactions, insider selling"
+)
+
+
+def retrieve_context(adapters: Adapters, ticker: str, cik: str) -> str:
+    """RAG: chunk filings -> embed -> Pinecone upsert -> retrieve top-k passages."""
+    filings = adapters.sec.get_filings(cik, ("10-K", "DEF 14A"))
+    chunks = chunk_filings(filings)
+    if not chunks:
+        return ""
+    vectors = adapters.llm.embed([c.text for c in chunks])
+    adapters.vector.upsert(
+        ticker,
+        [
+            VectorItem(c.id, v, {"text": c.text, "form": c.form})
+            for c, v in zip(chunks, vectors, strict=True)
+        ],
+    )
+    qvec = adapters.llm.embed([RETRIEVAL_QUERY])[0]
+    matches = adapters.vector.query(ticker, qvec, top_k=4)
+    return "\n".join(str(m.metadata.get("text", "")) for m in matches)
+
+
+def build_prompt(ticker: str, context: str) -> str:
+    return (
+        f"You are an equity research assistant analysing {ticker}. Use the SEC filing "
+        f"excerpts below AND a live web search (google_search) for recent news. Return "
+        'STRICT JSON: {"narrative": str, "promoter_findings": [{"criterion": one of '
+        "[ceo_tenure, public_co_experience, sec_enforcement, criminal_record, "
+        'related_party], "value": number|boolean|null, "severity": '
+        '"none|low|medium|high", "finding": str, "source_urls": [str]}], '
+        '"citations": [{"title": str, "url": str}]}. Do NOT compute any financial '
+        "figure or score; report only qualitative evidence; code will threshold it.\n\n"
+        f"SEC FILING EXCERPTS:\n{context or '(none)'}"
+    )
+
+
+def synthesize_company(adapters: Adapters, ticker: str, cik: str) -> dict[str, Any]:
+    """Non-streaming synthesis (used where a stream isn't needed / in tests)."""
+    context = retrieve_context(adapters, ticker, cik)
+    raw = adapters.llm.generate_json(build_prompt(ticker, context), grounded=True)
+    return validate_agent_output(raw)

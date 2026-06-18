@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+.env
+data/stockforensics.db
+data/stockforensics.db-*
+*.egg-info/
+dist/
+build/
