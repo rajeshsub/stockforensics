@@ -38,6 +38,8 @@ class CompanyScore(Base):
     narrative: Mapped[str | None] = mapped_column(String, nullable=True)
     # AI rationale for the composite score ("why this %"), distinct from the qualitative narrative
     composite_narrative: Mapped[str | None] = mapped_column(String, nullable=True)
+    # the model's streamed thought summaries (how it reasoned), replayed on cached views
+    reasoning: Mapped[str | None] = mapped_column(String, nullable=True)
     promoter_findings: Mapped[list[Any]] = mapped_column(JSON, default=list)
     # live web-grounding citations [{title, url, domain}] for the "In the news" cards
     citations: Mapped[list[Any]] = mapped_column(JSON, default=list)

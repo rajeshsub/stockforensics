@@ -1,3 +1,5 @@
+import { inline } from "./Synthesis";
+
 export interface Stage {
   stage: string;
   message: string;
@@ -6,13 +8,13 @@ export interface Stage {
 export function ThinkingStream({
   active,
   stages,
-  tokens,
+  reasoning,
   citations,
   error,
 }: {
   active: boolean;
   stages: Stage[];
-  tokens: string;
+  reasoning: string;
   citations: Array<{ title: string; url: string }>;
   error: string | null;
 }) {
@@ -43,7 +45,22 @@ export function ThinkingStream({
           );
         })}
 
-        {tokens && <div className="tokens">{tokens}</div>}
+        {reasoning && (
+          <div className="reasoning">
+            <div className="reasoning-label">
+              Model reasoning {active ? <span className="reasoning-cursor">▍</span> : null}
+            </div>
+            {reasoning
+              .split(/\n{2,}/)
+              .map((p) => p.trim())
+              .filter(Boolean)
+              .map((p, i) => (
+                <p key={i} className="reasoning-p">
+                  {inline(p, `rz${i}`)}
+                </p>
+              ))}
+          </div>
+        )}
 
         {citations.length > 0 && (
           <div className="citations">

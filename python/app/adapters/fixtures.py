@@ -196,6 +196,19 @@ class FixtureLlmClient:
             "rationale: value and quality dimensions carry the score while governance is neutral."
         )
 
+    def generate_json_streaming(
+        self, prompt: str, *, grounded: bool = False
+    ) -> Iterator[tuple[str, Any]]:
+        ticker = next((t for t in SAMPLE_TICKERS if t in prompt), "AAPL")
+        for thought in (
+            f"**Governance.** Reviewing {ticker}'s CEO tenure and board structure from the "
+            "filings; no enforcement or criminal history surfaced in the web results. ",
+            "**Financials.** Cross-checking the retrieved passages against recent news for "
+            "consistency before settling the qualitative view. ",
+        ):
+            yield ("thought", thought)
+        yield ("result", self.generate_json(prompt, grounded=grounded))
+
     def generate_json(self, prompt: str, *, grounded: bool = False) -> dict[str, Any]:
         ticker = next((t for t in SAMPLE_TICKERS if t in prompt), "AAPL")
         return {

@@ -216,6 +216,8 @@ def _cached_analysis_stream(c: CompanyScore, age_s: float) -> Iterator[str]:
         yield _sse(
             {"type": "stage", "stage": st.get("stage", ""), "message": st.get("message", "")}
         )
+    if c.reasoning:
+        yield _sse({"type": "thought", "text": c.reasoning})
     for cite in c.citations or []:
         yield _sse(
             {

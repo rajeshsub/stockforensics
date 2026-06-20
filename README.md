@@ -8,14 +8,26 @@ that code then thresholds. **Never says buy/sell; educational research only.**
 Single Python (FastAPI) backend + a static React SPA it serves. See `plan.md` for the
 full design and the grilled decision log.
 
+## Screenshots
+
+| Leaderboard | Company detail |
+|-------------|----------------|
+| ![Leaderboard](assets/leaderboard.png) | ![Company detail](assets/company-detail.png) |
+
+| Live thinking stream | Composite rationale |
+|----------------------|---------------------|
+| ![Thinking stream](assets/thinking-stream.png) | ![Composite rationale](assets/composite.png) |
+
 ## What the AI does (bounded, live, streamed)
 
 The deterministic scores need no AI. When you **select one stock**, the AI lazily,
-live, and up-to-the-minute: (1) RAG-retrieves the SEC filings, (2) writes a narrative,
-(3) extracts promoter governance evidence (with Gemini `google_search` grounding for
-fresh web/news). Its reasoning **streams** to a "thinking stream" (SSE). Code applies
-every threshold and every weighted sum; the LLM never computes a financial figure
-(rule #10). Promoter Integrity is finalised live on selection.
+live, and up-to-the-minute: (1) RAG-retrieves the SEC filings, (2) writes a qualitative
+narrative (a filings + web brief), (3) extracts promoter governance evidence (with
+Gemini `google_search` grounding for fresh web/news), and (4) after code scores the
+five dimensions, writes a separate **composite rationale** explaining the overall score
+in its own words. The model's own **thought summaries stream** to a "thinking stream"
+(SSE) as it reasons. Code applies every threshold and every weighted sum; the LLM never
+computes a financial figure (rule #10). Promoter Integrity is finalised live on selection.
 
 ## Architecture
 
@@ -40,14 +52,17 @@ Python FastAPI (one backend)              React SPA (served by FastAPI)
 ## Run it
 
 ```bash
-# Backend (offline: works with seed data, no keys)
+# One-time setup (offline: works with seed data, no keys)
 cd python && make bootstrap          # uv venv, deps, hooks, .env, DB, seed
 make test                            # offline gate: 80% coverage, all green
-make run-dev                         # FastAPI on :8000
 
-# Frontend
-cd ../frontend && npm install && npm run build   # served by FastAPI at :8000
-#   ...or `npm run dev` for the Vite dev server on :5173 (proxies /api)
+# Dev: backend (:8000) + Vite frontend (:5173, proxies /api) together, hot-reload
+make dev                             # run from python/
+
+# ...or run the two halves separately:
+make run-dev                         # FastAPI on :8000
+cd ../frontend && npm install && npm run build   # static build served by FastAPI at :8000
+#   ...or `npm run dev` for the Vite dev server on :5173 (proxies /api to :8000)
 ```
 
 Paste keys into `python/.env` when ready (`GEMINI_API_KEY`, `PINECONE_API_KEY`,

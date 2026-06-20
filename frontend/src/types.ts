@@ -84,6 +84,7 @@ export type DimKey = (typeof DIMENSIONS)[number]["key"];
 export type StreamHandlers = {
   onStage?: (d: { stage: string; message: string }) => void;
   onToken?: (d: { text: string }) => void;
+  onThought?: (d: { text: string }) => void;
   onCitation?: (d: { title: string; url: string; domain?: string }) => void;
   onScores?: (d: { ticker: string; narrative: string; composite_narrative?: string; promoter: DimensionDetail; composite_pct: number; scores: Record<string, DimensionDetail> }) => void;
   onCached?: (d: { age_minutes: number }) => void;

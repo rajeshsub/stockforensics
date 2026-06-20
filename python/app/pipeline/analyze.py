@@ -180,7 +180,16 @@ def analyze_stream(adapters: Adapters, ticker: str) -> Iterator[str]:
         "governance + financial evidence…",
     )
     prompt = build_prompt(tk, context)
-    raw = adapters.llm.generate_json(prompt, grounded=True)
+    # Stream the model's own thought summaries (how it weighs the evidence) as they arrive.
+    reasoning_parts: list[str] = []
+    raw: dict[str, Any] = {}
+    for kind, payload in adapters.llm.generate_json_streaming(prompt, grounded=True):
+        if kind == "thought":
+            reasoning_parts.append(payload)
+            yield _sse({"type": "thought", "text": payload})
+        else:
+            raw = payload
+    reasoning = "".join(reasoning_parts)
     contract = validate_agent_output(raw)
 
     n_find = len(contract["promoter_findings"])
@@ -225,6 +234,7 @@ def analyze_stream(adapters: Adapters, ticker: str) -> Iterator[str]:
             cik=cik,
             narrative=narrative,
             composite_narrative=composite_narrative,
+            reasoning=reasoning,
             promoter_live=True,
             citations=raw.get("citations", []),
             thinking=thinking,

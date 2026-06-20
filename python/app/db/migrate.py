@@ -10,7 +10,12 @@ from app.db.models import Base
 # Columns added after the initial schema: {table: {column: SQLite DDL type}}.
 # create_all() won't ALTER existing tables, so add them by hand (idempotent).
 _ADDED_COLUMNS = {
-    "company_scores": {"citations": "JSON", "thinking": "JSON", "composite_narrative": "VARCHAR"}
+    "company_scores": {
+        "citations": "JSON",
+        "thinking": "JSON",
+        "composite_narrative": "VARCHAR",
+        "reasoning": "VARCHAR",
+    }
 }
 
 

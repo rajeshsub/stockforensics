@@ -117,6 +117,40 @@ class GeminiLlmClient:
         resp = self._client.models.generate_content(model=self._model, contents=prompt)
         return (resp.text or "").strip()
 
+    def generate_json_streaming(
+        self, prompt: str, *, grounded: bool = False
+    ) -> Iterator[tuple[str, Any]]:
+        """Stream the model's *thought summaries* as it reasons, then yield the parsed
+        JSON. Emits ('thought', text) chunks while thinking, then a final ('result', dict).
+        thinking_config.include_thoughts surfaces Gemini's own reasoning (Q16)."""
+        tools = [types.Tool(google_search=types.GoogleSearch())] if grounded else None
+        cfg = types.GenerateContentConfig(
+            tools=tools,
+            temperature=0.0,
+            thinking_config=types.ThinkingConfig(include_thoughts=True),
+        )
+        text_parts: list[str] = []
+        grounding_resp: Any = None
+        for chunk in self._client.models.generate_content_stream(
+            model=self._model, contents=prompt, config=cfg
+        ):
+            for cand in chunk.candidates or []:
+                meta = getattr(cand, "grounding_metadata", None)
+                if meta and getattr(meta, "grounding_chunks", None):
+                    grounding_resp = chunk
+                content = getattr(cand, "content", None)
+                for part in getattr(content, "parts", None) or []:
+                    txt = getattr(part, "text", None)
+                    if not txt:
+                        continue
+                    if getattr(part, "thought", False):
+                        yield ("thought", txt)
+                    else:
+                        text_parts.append(txt)
+        data = _extract_json("".join(text_parts))
+        data.setdefault("citations", _citations(grounding_resp))
+        yield ("result", data)
+
     def generate_json(self, prompt: str, *, grounded: bool = False) -> dict[str, Any]:
         if grounded:
             # temperature=0 for run-to-run determinism: the governance findings that

@@ -19,6 +19,7 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
   const [stages, setStages] = useState<Stage[]>([]);
   const [liveNarrative, setLiveNarrative] = useState<string | null>(null);
   const [liveCompositeNarrative, setLiveCompositeNarrative] = useState<string | null>(null);
+  const [reasoning, setReasoning] = useState<string>("");
   const [cachedAgeMinutes, setCachedAgeMinutes] = useState<number | null>(null);
   const [citations, setCitations] = useState<Array<{ title: string; url: string; domain?: string }>>(
     [],
@@ -42,6 +43,7 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
       setCitations(cached.citations);
       setLiveNarrative(cached.narrative);
       setLiveCompositeNarrative(cached.compositeNarrative);
+      setReasoning(cached.reasoning ?? "");
       setLive(cached.scores);
       setCachedAgeMinutes(Math.max(0, Math.floor((Date.now() - cached.completedAt) / 60000)));
       setStreaming(false);
@@ -52,6 +54,7 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
     setStages([]);
     setLiveNarrative(null);
     setLiveCompositeNarrative(null);
+    setReasoning("");
     setCachedAgeMinutes(null);
     setCitations([]);
     setLive(null);
@@ -62,6 +65,7 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
       citations: [] as Array<{ title: string; url: string; domain?: string }>,
       narrative: null as string | null,
       compositeNarrative: null as string | null,
+      reasoning: "",
       scores: null as Record<string, DimensionDetail> | null,
     };
     return analyzeStream(ticker, {
@@ -72,6 +76,10 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
       onCitation: (c) => {
         acc.citations = [...acc.citations, c];
         setCitations(acc.citations);
+      },
+      onThought: (t) => {
+        acc.reasoning += t.text;
+        setReasoning(acc.reasoning);
       },
       onScores: (d) => {
         acc.scores = d.scores;
@@ -95,6 +103,7 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
             citations: acc.citations,
             narrative: acc.narrative,
             compositeNarrative: acc.compositeNarrative,
+            reasoning: acc.reasoning || null,
             scores: acc.scores,
             completedAt: Date.now(),
           });
@@ -230,7 +239,7 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
         <ThinkingStream
           active={streaming}
           stages={stages}
-          tokens=""
+          reasoning={reasoning}
           citations={citations}
           error={error}
         />

@@ -41,6 +41,7 @@ export function analyzeStream(ticker: string, h: StreamHandlers): () => void {
     es.addEventListener(name, (e) => cb(JSON.parse((e as MessageEvent).data)));
   if (h.onStage) on("stage", h.onStage);
   if (h.onToken) on("token", h.onToken);
+  if (h.onThought) on("thought", h.onThought);
   if (h.onCitation) on("citation", h.onCitation);
   if (h.onScores) on("scores", h.onScores);
   if (h.onCached) on("cached", h.onCached);

@@ -91,6 +91,13 @@ class LlmClient(Protocol):
         """Plain-prose completion (no grounding, no JSON) for short rationales."""
         ...
 
+    def generate_json_streaming(
+        self, prompt: str, *, grounded: bool = False
+    ) -> Iterator[tuple[str, Any]]:
+        """Like generate_json, but streams the model's thought summaries first: yields
+        ('thought', text) chunks as it reasons, then a final ('result', dict)."""
+        ...
+
 
 class VectorClient(Protocol):
     def upsert(self, namespace: str, items: list[VectorItem]) -> None: ...

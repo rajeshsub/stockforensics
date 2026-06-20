@@ -336,6 +336,13 @@ td.r, th.r { text-align: right; }
 .stage.active { color: var(--txt); font-weight: 600; }
 .stage .check { color: var(--good); }
 .tokens { white-space: pre-wrap; line-height: 1.5; margin-top: 10px; font-size: 13.5px; min-height: 40px; }
+/* The model's streamed thought summaries (how it reasons). */
+.reasoning { margin-top: 12px; padding: 10px 12px; border-radius: calc(var(--radius) / 2); background: color-mix(in srgb, var(--accent) 6%, var(--panel2)); border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); }
+.reasoning-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent); font-weight: 700; margin-bottom: 6px; }
+.reasoning-cursor { animation: blink 1s steps(2) infinite; font-weight: 400; }
+@keyframes blink { 50% { opacity: 0; } }
+.reasoning-p { margin: 0 0 8px; font-size: 12.5px; line-height: 1.55; color: var(--txt); }
+.reasoning-p:last-child { margin-bottom: 0; }
 .citations { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
 .citations a { font-size: 12px; }
 
