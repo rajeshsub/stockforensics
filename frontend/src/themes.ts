@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 export const THEMES = [
   { id: "fintech-light", label: "Fintech Light" },
-  { id: "glass-aurora", label: "Glass Aurora" },
+  { id: "sb-minimal", label: "SB Minimal" },
   { id: "slate-pro", label: "Slate Pro" },
   { id: "swiss-minimal", label: "Swiss Minimal" },
   { id: "warm-dashboard", label: "Warm Dashboard" },
@@ -11,10 +11,14 @@ export const THEMES = [
 export type ThemeId = (typeof THEMES)[number]["id"];
 const KEY = "sf-theme";
 
+const isThemeId = (v: string | null): v is ThemeId =>
+  THEMES.some((t) => t.id === v);
+
 export function useTheme(): [ThemeId, (t: ThemeId) => void] {
-  const [theme, setTheme] = useState<ThemeId>(
-    () => (localStorage.getItem(KEY) as ThemeId) || "fintech-light",
-  );
+  const [theme, setTheme] = useState<ThemeId>(() => {
+    const stored = localStorage.getItem(KEY);
+    return isThemeId(stored) ? stored : "sb-minimal";
+  });
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem(KEY, theme);

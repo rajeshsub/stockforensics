@@ -33,6 +33,8 @@ def save_company_score(
     cik: str | None = None,
     narrative: str | None = None,
     promoter_live: bool = False,
+    citations: list[Any] | None = None,
+    thinking: list[Any] | None = None,
 ) -> CompanyScore:
     """Insert/replace a company's scores. composite_pct is the 4-dim deterministic
     leaderboard composite (Q22); promoter_live marks a live-AI result (Q21)."""
@@ -49,6 +51,8 @@ def save_company_score(
         inputs=financials_to_inputs(cd),
         narrative=narrative,
         promoter_findings=cd.promoter_findings,
+        citations=citations or [],
+        thinking=thinking or [],
     )
     session.add(row)
     session.flush()

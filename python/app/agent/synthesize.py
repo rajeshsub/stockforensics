@@ -42,7 +42,12 @@ def retrieve_context(adapters: Adapters, ticker: str, cik: str) -> str:
 def build_prompt(ticker: str, context: str) -> str:
     return (
         f"You are an equity research assistant analysing {ticker}. Use the SEC filing "
-        f"excerpts below AND a live web search (google_search) for recent news. Return "
+        f"excerpts below AND a live web search (google_search) for recent news. The "
+        '"narrative" must be markdown: open with a 1-2 sentence executive summary '
+        "paragraph (no heading), then 3-5 sections each introduced by a '## Heading' "
+        "(e.g. ## Business & Moat, ## Financial Health, ## Recent Developments, "
+        "## Risks, ## Governance); keep each section to a short paragraph or a few "
+        "bullet points. Return "
         'STRICT JSON: {"narrative": str, "promoter_findings": [{"criterion": one of '
         "[ceo_tenure, public_co_experience, sec_enforcement, criminal_record, "
         'related_party], "value": number|boolean|null, "severity": '

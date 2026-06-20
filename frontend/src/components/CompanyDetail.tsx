@@ -7,6 +7,9 @@ import { RadarPanel } from "./RadarPanel";
 import { ThinkingStream, type Stage } from "./ThinkingStream";
 import { Breakdown } from "./Breakdown";
 import { WeightEditor } from "./WeightEditor";
+import { Synthesis } from "./Synthesis";
+import { CompositeCard } from "./CompositeCard";
+import { loadAnalysis, saveAnalysis } from "../analysisCache";
 
 export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () => void }) {
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -16,7 +19,9 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
   const [stages, setStages] = useState<Stage[]>([]);
   const [liveNarrative, setLiveNarrative] = useState<string | null>(null);
   const [cachedAgeMinutes, setCachedAgeMinutes] = useState<number | null>(null);
-  const [citations, setCitations] = useState<Array<{ title: string; url: string }>>([]);
+  const [citations, setCitations] = useState<Array<{ title: string; url: string; domain?: string }>>(
+    [],
+  );
   const [error, setError] = useState<string | null>(null);
   const [breakdown, setBreakdown] = useState<DimensionDetail | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -26,24 +31,68 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
     getCompany(ticker).then(setDetail).catch((e) => setError(String(e)));
   }, [ticker]);
 
-  // 2. open the live SSE thinking-stream
+  // 2. open the live SSE thinking-stream — unless we already have a fresh client-side
+  //    cached analysis for this ticker, in which case we restore it (so the thinking
+  //    stream, narrative, citations and live Promoter score survive a back/return).
   useEffect(() => {
+    const cached = loadAnalysis(ticker);
+    if (cached) {
+      setStages(cached.stages);
+      setCitations(cached.citations);
+      setLiveNarrative(cached.narrative);
+      setLive(cached.scores);
+      setCachedAgeMinutes(Math.max(0, Math.floor((Date.now() - cached.completedAt) / 60000)));
+      setStreaming(false);
+      return;
+    }
+
     setStreaming(true);
     setStages([]);
     setLiveNarrative(null);
     setCachedAgeMinutes(null);
     setCitations([]);
     setLive(null);
+
+    // accumulate into refs so onDone can persist the completed analysis
+    const acc = {
+      stages: [] as Stage[],
+      citations: [] as Array<{ title: string; url: string; domain?: string }>,
+      narrative: null as string | null,
+      scores: null as Record<string, DimensionDetail> | null,
+    };
     return analyzeStream(ticker, {
-      onStage: (s) => setStages((p) => [...p, s]),
-      onCitation: (c) => setCitations((p) => [...p, c]),
-      onScores: (d) => { setLive(d.scores); setLiveNarrative(d.narrative); },
+      onStage: (s) => {
+        acc.stages = [...acc.stages, s];
+        setStages(acc.stages);
+      },
+      onCitation: (c) => {
+        acc.citations = [...acc.citations, c];
+        setCitations(acc.citations);
+      },
+      onScores: (d) => {
+        acc.scores = d.scores;
+        acc.narrative = d.narrative;
+        setLive(d.scores);
+        setLiveNarrative(d.narrative);
+      },
       onCached: (d) => setCachedAgeMinutes(d.age_minutes),
       onError: (e) => {
         setError(e.message);
         setStreaming(false);
       },
-      onDone: () => setStreaming(false),
+      onDone: () => {
+        setStreaming(false);
+        if (acc.scores) {
+          saveAnalysis({
+            ticker,
+            stages: acc.stages,
+            citations: acc.citations,
+            narrative: acc.narrative,
+            scores: acc.scores,
+            completedAt: Date.now(),
+          });
+        }
+      },
     });
   }, [ticker]);
 
@@ -149,15 +198,24 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
             />
           );
         })}
+        <CompositeCard
+          compositePct={composite}
+          narrative={liveNarrative || detail.narrative}
+          dims={radar}
+          streaming={streaming}
+        />
       </div>
 
       <div className="cols">
         <RadarPanel data={radar} />
         <div className="panel">
           <div className="section-title">Qualitative synthesis (AI, display-only)</div>
-          <div style={{ lineHeight: 1.55 }}>
-            {liveNarrative || detail.narrative || (streaming ? "…" : "No narrative yet.")}
-          </div>
+          <Synthesis
+            narrative={liveNarrative || detail.narrative}
+            citations={citations.length ? citations : detail.citations}
+            findings={detail.promoter_findings}
+            streaming={streaming}
+          />
         </div>
       </div>
 

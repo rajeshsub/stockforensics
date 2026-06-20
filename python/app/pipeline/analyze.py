@@ -29,6 +29,17 @@ if TYPE_CHECKING:
 
 log = get_logger("analyze")
 
+# Representative completed pipeline, used by the non-streaming path and as the
+# cached-view fallback so the thinking stream always has stages to show (Q16).
+COMPLETED_STAGES: list[dict[str, str]] = [
+    {"stage": "resolving", "message": "Resolved company + CIK"},
+    {"stage": "filings", "message": "Fetched SEC filings (10-K + DEF 14A)"},
+    {"stage": "retrieving", "message": "Retrieved relevant filing passages"},
+    {"stage": "reasoning", "message": "Searched the web and synthesised (live)"},
+    {"stage": "evidence", "message": "Extracted governance evidence + citations"},
+    {"stage": "scoring", "message": "Thresholded evidence + scored (code)"},
+]
+
 
 def _attach_sector_context_from_peers(session: Session, cd: CompanyFinancials) -> None:
     """Compute sector-relative P/E & P/B percentiles using the batch's stored peers."""
@@ -81,6 +92,8 @@ def analyze_company(adapters: Adapters, session: Session, ticker: str) -> dict[s
         cik=cik,
         narrative=contract["narrative"],
         promoter_live=True,
+        citations=raw.get("citations", []),
+        thinking=COMPLETED_STAGES,
     )
     return {
         "ticker": ticker.upper(),
@@ -104,19 +117,26 @@ def analyze_stream(adapters: Adapters, ticker: str) -> Iterator[str]:
     """Stream the AI's thinking as SSE: stage events + narrative tokens + citations,
     then the final live scores. Persists the result at the end (Q16, Q21)."""
     tk = ticker.upper()
-    yield _sse({"type": "stage", "stage": "resolving", "message": f"Resolving {tk}…"})
+    # record each stage so cached/return views can replay the thinking stream (Q16)
+    thinking: list[dict[str, str]] = []
+
+    def stage(s: str, message: str) -> str:
+        thinking.append({"stage": s, "message": message})
+        return _stage(s, message)
+
+    yield stage("resolving", f"Resolving {tk}…")
     cik = adapters.sec.resolve_cik(tk)
     if not cik:
         yield _sse({"type": "error", "message": f"Could not resolve CIK for {tk}"})
         return
 
-    yield _stage("filings", "Fetching SEC filings (10-K + DEF 14A)…")
+    yield stage("filings", "Fetching SEC filings (10-K + DEF 14A)…")
     filings = adapters.sec.get_filings(cik, ("10-K", "DEF 14A"))
     chunks = chunk_filings(filings)
 
     context = ""
     if chunks:
-        yield _stage("embedding", f"Embedding {len(chunks)} filing chunks…")
+        yield stage("embedding", f"Embedding {len(chunks)} filing chunks…")
         vectors = adapters.llm.embed([c.text for c in chunks])
         adapters.vector.upsert(
             tk,
@@ -125,27 +145,42 @@ def analyze_stream(adapters: Adapters, ticker: str) -> Iterator[str]:
                 for c, v in zip(chunks, vectors, strict=True)
             ],
         )
-        yield _stage("retrieving", "Retrieving relevant passages…")
+        yield stage("retrieving", "Retrieving relevant passages…")
         qvec = adapters.llm.embed([RETRIEVAL_QUERY])[0]
         matches = adapters.vector.query(tk, qvec, top_k=4)
         context = "\n".join(str(m.metadata.get("text", "")) for m in matches)
 
-    yield _stage("reasoning", "Searching the web and synthesising (live)…")
+    yield stage("reasoning", "Searching the web and synthesising (live)…")
     prompt = build_prompt(tk, context)
     raw = adapters.llm.generate_json(prompt, grounded=True)
     contract = validate_agent_output(raw)
 
-    yield _stage("evidence", "Extracting governance evidence + citations…")
+    yield stage("evidence", "Extracting governance evidence + citations…")
     for cite in raw.get("citations", []):
-        yield _sse({"type": "citation", "title": cite.get("title", ""), "url": cite.get("url", "")})
+        yield _sse(
+            {
+                "type": "citation",
+                "title": cite.get("title", ""),
+                "url": cite.get("url", ""),
+                "domain": cite.get("domain", ""),
+            }
+        )
 
-    yield _stage("scoring", "Thresholding evidence + scoring (code)…")
+    yield stage("scoring", "Thresholding evidence + scoring (code)…")
     with session_scope() as session:
         cd, cik, name = _assemble_live(adapters, session, tk, contract["promoter_findings"])
         dims = score_all(cd)
         narrative = contract["narrative"]
         save_company_score(
-            session, cd, dims, name=name, cik=cik, narrative=narrative, promoter_live=True
+            session,
+            cd,
+            dims,
+            name=name,
+            cik=cik,
+            narrative=narrative,
+            promoter_live=True,
+            citations=raw.get("citations", []),
+            thinking=thinking,
         )
         promoter = dims["promoter_integrity"].to_dict()
         full_composite = round(composite_pct(dims), 1)

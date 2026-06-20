@@ -34,7 +34,12 @@ def _citations(response: Any) -> list[dict[str, str]]:
         for chunk in meta.grounding_chunks or []:
             web = getattr(chunk, "web", None)
             if web and getattr(web, "uri", None):
-                out.append({"title": getattr(web, "title", "") or web.uri, "url": web.uri})
+                title = getattr(web, "title", "") or web.uri
+                # Gemini grounding exposes the real publisher domain (the uri is an
+                # opaque vertexaisearch redirect); keep it so the UI can show the
+                # publisher's favicon instead of a generic globe.
+                domain = getattr(web, "domain", "") or (title if "." in title else "")
+                out.append({"title": title, "url": web.uri, "domain": domain})
     except (AttributeError, IndexError, TypeError):
         pass
     return out

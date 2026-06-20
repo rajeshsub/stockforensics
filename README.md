@@ -70,7 +70,7 @@ the full 5-dim composite appears in a stock's detail view.
 
 ## Themes
 
-Five user-selectable themes (Fintech Light, Glass Aurora, Slate Pro, Swiss Minimal,
+Five user-selectable themes (Fintech Light, SB Minimal, Slate Pro, Swiss Minimal,
 Warm Dashboard) built on CSS design tokens; static mockups in `design-samples/`.
 
 ## Tests / CI

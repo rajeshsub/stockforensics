@@ -36,14 +36,20 @@ function aiStatusInfo(analyzedAt: string | null): { label: string; cls: string }
   };
 }
 
+/** Round to integer, but keep one decimal for small non-zero values so a real
+ * fractional score (e.g. 0.3%) is never displayed as a flat "0". */
+function fmtPct(pct: number): string {
+  return pct > 0 && pct < 0.95 ? pct.toFixed(1) : pct.toFixed(0);
+}
+
 function Cell({ pct }: { pct: number }) {
   const c = scoreColor(pct);
   return (
     <div
-      className="cell num"
+      className={`cell num${pct === 0 ? " zero" : ""}`}
       style={{ color: c, background: `color-mix(in srgb, ${c} 14%, transparent)` }}
     >
-      {pct.toFixed(0)}
+      {fmtPct(pct)}
     </div>
   );
 }
@@ -124,7 +130,7 @@ function Row({ c, onSelect }: { c: CompanySummary; onSelect: (t: string) => void
         </div>
       )}
       <div className="cell num" style={{ color: scoreColor(c.composite_pct) }}>
-        {c.composite_pct.toFixed(0)}
+        {fmtPct(c.composite_pct)}
       </div>
     </>
   );

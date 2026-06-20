@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getCompanies } from "./api";
 import type { CompanySummary } from "./types";
 import { THEMES, useTheme } from "./themes";
@@ -11,11 +11,22 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const refreshCompanies = useCallback(() => {
     getCompanies()
       .then(setCompanies)
       .catch((e) => setError(String(e)));
   }, []);
+
+  useEffect(() => {
+    refreshCompanies();
+  }, [refreshCompanies]);
+
+  // Returning from a stock refetches the leaderboard so a just-finished analysis
+  // (Promoter score + "analysed N ago" status) is reflected instead of going stale.
+  const handleBack = useCallback(() => {
+    setSelected(null);
+    refreshCompanies();
+  }, [refreshCompanies]);
 
   return (
     <>
@@ -37,7 +48,7 @@ export default function App() {
       <div className="container">
         {error && <div className="card">Backend not reachable: {error}</div>}
         {selected ? (
-          <CompanyDetail ticker={selected} onBack={() => setSelected(null)} />
+          <CompanyDetail ticker={selected} onBack={handleBack} />
         ) : (
           <Leaderboard companies={companies} onSelect={setSelected} />
         )}

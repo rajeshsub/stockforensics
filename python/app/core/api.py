@@ -110,6 +110,7 @@ def _detail(c: CompanyScore) -> dict[str, Any]:
         "scores": c.scores,
         "narrative": c.narrative,
         "promoter_findings": c.promoter_findings,
+        "citations": c.citations or [],
     }
 
 
@@ -206,18 +207,35 @@ def _sse(event: dict[str, Any]) -> str:
 
 
 def _cached_analysis_stream(c: CompanyScore, age_s: float) -> Iterator[str]:
+    from app.pipeline.analyze import COMPLETED_STAGES
+
     age_min = int(age_s // 60)
     yield _sse({"type": "cached", "age_minutes": age_min})
+    for st in c.thinking or COMPLETED_STAGES:
+        yield _sse(
+            {"type": "stage", "stage": st.get("stage", ""), "message": st.get("message", "")}
+        )
+    for cite in c.citations or []:
+        yield _sse(
+            {
+                "type": "citation",
+                "title": cite.get("title", ""),
+                "url": cite.get("url", ""),
+                "domain": cite.get("domain", ""),
+            }
+        )
     avail = [v["normalized_pct"] for v in c.scores.values() if v.get("max_score", 0) > 0]
     full_composite = round(sum(avail) / len(avail), 1) if avail else 0.0
-    yield _sse({
-        "type": "scores",
-        "ticker": c.ticker,
-        "narrative": c.narrative or "",
-        "promoter": c.scores.get("promoter_integrity", {}),
-        "composite_pct": full_composite,
-        "scores": c.scores,
-    })
+    yield _sse(
+        {
+            "type": "scores",
+            "ticker": c.ticker,
+            "narrative": c.narrative or "",
+            "promoter": c.scores.get("promoter_integrity", {}),
+            "composite_pct": full_composite,
+            "scores": c.scores,
+        }
+    )
     yield _sse({"type": "done", "ticker": c.ticker})
 
 

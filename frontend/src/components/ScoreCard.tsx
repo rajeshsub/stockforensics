@@ -34,14 +34,10 @@ export function ScoreCard({
     );
   }
   const pct = dim.normalized_pct;
+  const isZero = dim.max_score > 0 && dim.score === 0; // genuinely scored 0 (not NA)
   return (
-    <div className="card">
+    <div className={`card${isZero ? " card-zero" : ""}`}>
       <div className="icons">
-        {onInfo && (
-          <button title="breakdown" onClick={onInfo}>
-            ⓘ
-          </button>
-        )}
         {onEdit && (
           <button title="edit weights" onClick={onEdit}>
             ⚙
@@ -50,16 +46,27 @@ export function ScoreCard({
       </div>
       <div className="label">{label}</div>
       <div className="score num">
-        {dim.score.toFixed(1)}
+        {isZero ? (
+          <span className="zero-ring" title="Scored zero: every evaluated criterion failed">
+            0
+          </span>
+        ) : (
+          dim.score.toFixed(1)
+        )}
         <span className="den">/{dim.max_score.toFixed(1)}</span>
       </div>
       <div className="bar">
         <i style={{ width: `${pct}%`, background: scoreColor(pct) }} />
       </div>
       <div className="meta">
-        <span>{pct.toFixed(0)}%</span>
+        <span>{pct > 0 && pct < 0.95 ? pct.toFixed(1) : pct.toFixed(0)}%</span>
         <span>conf {dim.confidence.toFixed(2)}</span>
       </div>
+      {onInfo && (
+        <button className="info-pill" onClick={onInfo}>
+          Click for info
+        </button>
+      )}
     </div>
   );
 }

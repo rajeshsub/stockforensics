@@ -58,6 +58,7 @@ export interface CompanyDetail {
   scores: Record<string, DimensionDetail>;
   narrative: string | null;
   promoter_findings: Array<Record<string, unknown>>;
+  citations: Array<{ title: string; url: string; domain?: string }>;
 }
 
 export interface MarketQuote {
@@ -82,7 +83,7 @@ export type DimKey = (typeof DIMENSIONS)[number]["key"];
 export type StreamHandlers = {
   onStage?: (d: { stage: string; message: string }) => void;
   onToken?: (d: { text: string }) => void;
-  onCitation?: (d: { title: string; url: string }) => void;
+  onCitation?: (d: { title: string; url: string; domain?: string }) => void;
   onScores?: (d: { ticker: string; narrative: string; promoter: DimensionDetail; composite_pct: number; scores: Record<string, DimensionDetail> }) => void;
   onCached?: (d: { age_minutes: number }) => void;
   onError?: (d: { message: string }) => void;
