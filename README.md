@@ -10,13 +10,22 @@ full design and the grilled decision log.
 
 ## Screenshots
 
-| Leaderboard | Company detail |
-|-------------|----------------|
-| ![Leaderboard](assets/leaderboard.png) | ![Company detail](assets/company-detail.png) |
+### Leaderboard (main screen)
 
-| Live thinking stream | Composite rationale |
-|----------------------|---------------------|
-| ![Thinking stream](assets/thinking-stream.png) | ![Composite rationale](assets/composite.png) |
+![Leaderboard](assets/leaderboard.png)
+
+### Single-stock analysis
+
+The per-stock dashboard, its five score breakdowns, the radar, and the live AI panels:
+
+![Stock dashboard](assets/stockdashboard.png)
+
+| | |
+|---|---|
+| ![Graham score](assets/graham%20score.png) | ![Buffett quality](assets/buffet%20quality.png) |
+| ![Munger composite](assets/munger%20composite.png) | ![Earnings quality](assets/earnings%20quality.png) |
+| ![Promoter integrity](assets/promoter%20integrrity.png) | ![Qualitative AI synthesis](assets/qualitative%20AI%20synthesis.png) |
+| ![Composite AI analysis](assets/composite%20ai%20analysis.png) | ![AI thinking stream](assets/AI%20thinking%20stream.png) |
 
 ## What the AI does (bounded, live, streamed)
 

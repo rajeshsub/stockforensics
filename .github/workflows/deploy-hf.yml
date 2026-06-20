@@ -1,0 +1,81 @@
+name: Deploy to Hugging Face Space
+
+# Deploys the repo to a Hugging Face Docker Space.
+# - GEMINI_API_KEY is provisioned from a GitHub secret into the Space (runtime key).
+# - API_KEY (gatekeeping) is NOT set here: the deployer sets it in the Space settings;
+#   the Dockerfile bakes it into the SPA build and the backend enforces it at runtime.
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-hf
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepend Hugging Face Space metadata to README
+        run: |
+          tmp="$(mktemp)"
+          cat > "$tmp" <<'EOF'
+          ---
+          title: StockForensics
+          emoji: 📈
+          colorFrom: blue
+          colorTo: indigo
+          sdk: docker
+          app_port: 7860
+          pinned: false
+          ---
+
+          EOF
+          cat README.md >> "$tmp"
+          mv "$tmp" README.md
+
+      - name: Provision GEMINI_API_KEY as a Space secret
+        if: ${{ env.GEMINI_API_KEY != '' }}
+        run: |
+          pip install --quiet "huggingface_hub>=0.24"
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+          HfApi(token=os.environ["HF_TOKEN"]).add_space_secret(
+              repo_id=os.environ["HF_SPACE_ID"],
+              key="GEMINI_API_KEY",
+              value=os.environ["GEMINI_API_KEY"],
+          )
+          print("GEMINI_API_KEY set on", os.environ["HF_SPACE_ID"])
+          PY
+
+      - name: Push to Hugging Face Space
+        run: |
+          owner="${HF_SPACE_ID%%/*}"
+          git config user.email "github-actions@users.noreply.github.com"
+          git config user.name "github-actions"
+          git add README.md
+          git commit -m "ci: add Hugging Face Space metadata" || true
+
+          # Hugging Face rejects raw binary blobs; track them with Git LFS.
+          # The deploy checkout is throwaway and force-pushed, so rewriting
+          # history here does not affect the GitHub repo.
+          #
+          # --everything is required: without it, migrate only rewrites commits
+          # that don't already exist on a remote. The checkout fetches full
+          # history with origin/* refs, so the PNG-bearing commits would be
+          # skipped and pushed as raw binaries (which HF rejects).
+          git lfs install --local
+          git lfs migrate import --everything --include="*.png"
+
+          git push --force "https://${owner}:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_ID}" HEAD:main

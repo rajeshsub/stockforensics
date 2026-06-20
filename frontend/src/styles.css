@@ -354,3 +354,37 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .muted { color: var(--mut); font-size: 12px; }
 .foot { color: var(--mut); font-size: 12px; margin-top: 22px; line-height: 1.6; }
 select { font: inherit; padding: 6px 10px; border-radius: calc(var(--radius) / 2); border: 1px solid var(--line); background: var(--panel); color: var(--txt); }
+
+/* The leaderboard heatmap has 7 columns; on narrow screens it scrolls sideways
+   inside this wrapper instead of crushing the columns or overflowing the page. */
+.heat-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.heat-scroll::-webkit-scrollbar { height: 8px; }
+.heat-scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
+
+/* ------------------------------------------------------------------ *
+ * Responsive: tablet (<=760px) and phone (<=520px).                   *
+ * Layout grids (.grid, .cols) already collapse via their own queries. *
+ * ------------------------------------------------------------------ */
+@media (max-width: 760px) {
+  .container { padding: 14px; }
+  .topbar { padding: 10px 14px; gap: 10px; }
+  .hdr { gap: 8px; margin-bottom: 14px; }
+  .hdr h1 { font-size: 19px; }
+  .modal { padding: 16px; }
+  /* keep all heatmap columns legible by scrolling rather than shrinking */
+  .heat { min-width: 600px; }
+}
+
+@media (max-width: 520px) {
+  body { font-size: 13.5px; }
+  /* topbar wraps: theme picker stays top-right, disclaimer drops to its own line */
+  .topbar { flex-wrap: wrap; }
+  .topbar .spacer { display: none; }
+  .topbar select { margin-left: auto; }
+  .disclaimer { order: 3; flex-basis: 100%; }
+  /* score cards two-up still fit; narrow the composite dim labels */
+  .composite-dim > span:first-child { width: 74px; }
+  /* let the synthesis flow with the page instead of an inner scroll box */
+  .synth-scroll, .thinking-stages, .composite-narrative { max-height: none; }
+  .score { font-size: 28px; }
+}

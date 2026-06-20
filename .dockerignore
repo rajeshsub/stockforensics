@@ -1,0 +1,18 @@
+# keep the build context small + reproducible (deps are installed in-image)
+.git
+.github
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/htmlcov
+**/.coverage
+frontend/dist
+python/data
+design-samples
+plan.md
+plan-v1-original.md
+**/.env
+assets

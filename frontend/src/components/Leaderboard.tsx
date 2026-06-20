@@ -80,6 +80,7 @@ export function Leaderboard({
 
       <div className="panel">
         <div className="section-title">Click a company to run live AI analysis</div>
+        <div className="heat-scroll">
         <div className="heat">
           <div className="heat-head">
             <div className="h" onClick={() => setSort("ticker")}>
@@ -101,6 +102,7 @@ export function Leaderboard({
           {rows.map((c) => (
             <Row key={c.ticker} c={c} onSelect={onSelect} />
           ))}
+        </div>
         </div>
         <div className="foot">
           Promoter Integrity is computed live when you select a stock (it needs the AI).
