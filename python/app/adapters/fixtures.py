@@ -189,6 +189,13 @@ class FixtureLlmClient:
         for word in self._narrative(prompt).split():
             yield word + " "
 
+    def generate_text(self, prompt: str) -> str:
+        ticker = next((t for t in SAMPLE_TICKERS if t in prompt), "AAPL")
+        return (
+            f"**{ticker} lands mid-pack on the deterministic screen.** Fixture composite "
+            "rationale: value and quality dimensions carry the score while governance is neutral."
+        )
+
     def generate_json(self, prompt: str, *, grounded: bool = False) -> dict[str, Any]:
         ticker = next((t for t in SAMPLE_TICKERS if t in prompt), "AAPL")
         return {

@@ -14,7 +14,13 @@ from sqlalchemy.orm import Session
 
 from app.adapters.protocols import InsiderSummary, VectorItem
 from app.agent.contract import validate_agent_output
-from app.agent.synthesize import RETRIEVAL_QUERY, build_prompt, retrieve_context
+from app.agent.synthesize import (
+    RETRIEVAL_QUERY,
+    build_composite_prompt,
+    build_prompt,
+    retrieve_context,
+)
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.engine import session_scope
 from app.db.models import CompanyScore
@@ -32,12 +38,14 @@ log = get_logger("analyze")
 # Representative completed pipeline, used by the non-streaming path and as the
 # cached-view fallback so the thinking stream always has stages to show (Q16).
 COMPLETED_STAGES: list[dict[str, str]] = [
-    {"stage": "resolving", "message": "Resolved company + CIK"},
+    {"stage": "resolving", "message": "Resolved company + SEC EDGAR CIK"},
     {"stage": "filings", "message": "Fetched SEC filings (10-K + DEF 14A)"},
-    {"stage": "retrieving", "message": "Retrieved relevant filing passages"},
-    {"stage": "reasoning", "message": "Searched the web and synthesised (live)"},
-    {"stage": "evidence", "message": "Extracted governance evidence + citations"},
-    {"stage": "scoring", "message": "Thresholded evidence + scored (code)"},
+    {"stage": "chunking", "message": "Parsed filings into text chunks"},
+    {"stage": "embedding", "message": "Embedded chunks for semantic retrieval"},
+    {"stage": "retrieving", "message": "Retrieved the most relevant filing passages"},
+    {"stage": "reasoning", "message": "Queried the model with live Google Search grounding"},
+    {"stage": "evidence", "message": "Extracted governance findings + web citations"},
+    {"stage": "scoring", "message": "Thresholded evidence against the rules + scored"},
 ]
 
 
@@ -84,6 +92,10 @@ def analyze_company(adapters: Adapters, session: Session, ticker: str) -> dict[s
 
     cd, cik, name = _assemble_live(adapters, session, ticker, contract["promoter_findings"])
     dims = score_all(cd)
+    full_composite = round(composite_pct(dims), 1)
+    composite_narrative = adapters.llm.generate_text(
+        build_composite_prompt(ticker.upper(), full_composite, dims)
+    )
     save_company_score(
         session,
         cd,
@@ -91,6 +103,7 @@ def analyze_company(adapters: Adapters, session: Session, ticker: str) -> dict[s
         name=name,
         cik=cik,
         narrative=contract["narrative"],
+        composite_narrative=composite_narrative,
         promoter_live=True,
         citations=raw.get("citations", []),
         thinking=COMPLETED_STAGES,
@@ -98,6 +111,7 @@ def analyze_company(adapters: Adapters, session: Session, ticker: str) -> dict[s
     return {
         "ticker": ticker.upper(),
         "narrative": contract["narrative"],
+        "composite_narrative": composite_narrative,
         "citations": raw.get("citations", []),
         "scores": {k: v.to_dict() for k, v in dims.items()},
         "composite_pct": round(composite_pct(dims), 1),
@@ -117,6 +131,7 @@ def analyze_stream(adapters: Adapters, ticker: str) -> Iterator[str]:
     """Stream the AI's thinking as SSE: stage events + narrative tokens + citations,
     then the final live scores. Persists the result at the end (Q16, Q21)."""
     tk = ticker.upper()
+    settings = get_settings()
     # record each stage so cached/return views can replay the thinking stream (Q16)
     thinking: list[dict[str, str]] = []
 
@@ -124,19 +139,25 @@ def analyze_stream(adapters: Adapters, ticker: str) -> Iterator[str]:
         thinking.append({"stage": s, "message": message})
         return _stage(s, message)
 
-    yield stage("resolving", f"Resolving {tk}…")
+    yield stage("resolving", f"Resolving ticker {tk} to its SEC EDGAR CIK…")
     cik = adapters.sec.resolve_cik(tk)
     if not cik:
         yield _sse({"type": "error", "message": f"Could not resolve CIK for {tk}"})
         return
 
-    yield stage("filings", "Fetching SEC filings (10-K + DEF 14A)…")
+    yield stage("filings", f"CIK {cik} resolved · fetching SEC filings (10-K + DEF 14A)…")
     filings = adapters.sec.get_filings(cik, ("10-K", "DEF 14A"))
     chunks = chunk_filings(filings)
+    yield stage(
+        "chunking", f"Parsed {len(filings)} filing(s) into {len(chunks)} searchable text chunks"
+    )
 
     context = ""
     if chunks:
-        yield stage("embedding", f"Embedding {len(chunks)} filing chunks…")
+        yield stage(
+            "embedding",
+            f"Embedding {len(chunks)} chunks with {settings.gemini_embed_model} for retrieval…",
+        )
         vectors = adapters.llm.embed([c.text for c in chunks])
         adapters.vector.upsert(
             tk,
@@ -145,17 +166,29 @@ def analyze_stream(adapters: Adapters, ticker: str) -> Iterator[str]:
                 for c, v in zip(chunks, vectors, strict=True)
             ],
         )
-        yield stage("retrieving", "Retrieving relevant passages…")
         qvec = adapters.llm.embed([RETRIEVAL_QUERY])[0]
         matches = adapters.vector.query(tk, qvec, top_k=4)
         context = "\n".join(str(m.metadata.get("text", "")) for m in matches)
+        yield stage(
+            "retrieving",
+            f"Retrieved the {len(matches)} filing passages most relevant to governance",
+        )
 
-    yield stage("reasoning", "Searching the web and synthesising (live)…")
+    yield stage(
+        "reasoning",
+        f"Querying {settings.gemini_model} with live Google Search grounding for "
+        "governance + financial evidence…",
+    )
     prompt = build_prompt(tk, context)
     raw = adapters.llm.generate_json(prompt, grounded=True)
     contract = validate_agent_output(raw)
 
-    yield stage("evidence", "Extracting governance evidence + citations…")
+    n_find = len(contract["promoter_findings"])
+    n_cite = len(raw.get("citations", []))
+    yield stage(
+        "evidence",
+        f"Model returned {n_find} governance finding(s) and {n_cite} live web source(s)",
+    )
     for cite in raw.get("citations", []):
         yield _sse(
             {
@@ -166,11 +199,24 @@ def analyze_stream(adapters: Adapters, ticker: str) -> Iterator[str]:
             }
         )
 
-    yield stage("scoring", "Thresholding evidence + scoring (code)…")
+    yield stage("scoring", "Thresholding the evidence against the deterministic rules + scoring…")
     with session_scope() as session:
         cd, cik, name = _assemble_live(adapters, session, tk, contract["promoter_findings"])
         dims = score_all(cd)
         narrative = contract["narrative"]
+        promoter = dims["promoter_integrity"].to_dict()
+        full_composite = round(composite_pct(dims), 1)
+        n_dims = sum(1 for d in dims.values() if d.max_score > 0)
+        summary = stage(
+            "scored",
+            f"Promoter Integrity {promoter['score']:.1f}/{promoter['max_score']:.1f} "
+            f"({promoter['normalized_pct']:.0f}%) · composite {full_composite:.0f}% "
+            f"across {n_dims} scored dimensions",
+        )
+        composite_narrative = adapters.llm.generate_text(
+            build_composite_prompt(tk, full_composite, dims)
+        )
+        rationale = stage("rationale", f"Explained the {full_composite:.0f}% composite verdict")
         save_company_score(
             session,
             cd,
@@ -178,18 +224,20 @@ def analyze_stream(adapters: Adapters, ticker: str) -> Iterator[str]:
             name=name,
             cik=cik,
             narrative=narrative,
+            composite_narrative=composite_narrative,
             promoter_live=True,
             citations=raw.get("citations", []),
             thinking=thinking,
         )
-        promoter = dims["promoter_integrity"].to_dict()
-        full_composite = round(composite_pct(dims), 1)
 
+    yield summary
+    yield rationale
     yield _sse(
         {
             "type": "scores",
             "ticker": tk,
             "narrative": narrative,
+            "composite_narrative": composite_narrative,
             "promoter": promoter,
             "composite_pct": full_composite,
             "scores": {k: v.to_dict() for k, v in dims.items()},

@@ -32,30 +32,32 @@ export function ThinkingStream({
         )}
       </div>
 
-      {stages.map((s, i) => {
-        const isLast = i === stages.length - 1;
-        const done = !isLast || !active;
-        return (
-          <div key={i} className={`stage ${isLast && active ? "active" : ""}`}>
-            <span className="check">{done ? "✓" : "▸"}</span> {s.message}
+      <div className="thinking-stages">
+        {stages.map((s, i) => {
+          const isLast = i === stages.length - 1;
+          const done = !isLast || !active;
+          return (
+            <div key={i} className={`stage ${isLast && active ? "active" : ""}`}>
+              <span className="check">{done ? "✓" : "▸"}</span> {s.message}
+            </div>
+          );
+        })}
+
+        {tokens && <div className="tokens">{tokens}</div>}
+
+        {citations.length > 0 && (
+          <div className="citations">
+            <div className="muted">Sources (live web grounding):</div>
+            {citations.map((c, i) => (
+              <a key={i} href={c.url} target="_blank" rel="noreferrer">
+                {c.title || c.url}
+              </a>
+            ))}
           </div>
-        );
-      })}
+        )}
 
-      {tokens && <div className="tokens">{tokens}</div>}
-
-      {citations.length > 0 && (
-        <div className="citations">
-          <div className="muted">Sources (live web grounding):</div>
-          {citations.map((c, i) => (
-            <a key={i} href={c.url} target="_blank" rel="noreferrer">
-              {c.title || c.url}
-            </a>
-          ))}
-        </div>
-      )}
-
-      {error && <div className="no">{error}</div>}
+        {error && <div className="no">{error}</div>}
+      </div>
     </div>
   );
 }

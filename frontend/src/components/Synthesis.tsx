@@ -4,16 +4,20 @@
  * dividers, plus a strip of source cards (with the publisher's favicon) drawn
  * from live web citations. */
 
-import type { ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 
 type Block = { kind: "li"; items: string[] } | { kind: "p"; text: string };
+
+/** How many source cards to show inline before collapsing the rest behind a
+ * "Show all sources" button that opens the full list in a modal. */
+const SOURCE_PREVIEW = 5;
 
 interface Section {
   heading: string | null;
   blocks: Block[];
 }
 
-function parseNarrative(md: string): { summary: string; sections: Section[] } {
+export function parseNarrative(md: string): { summary: string; sections: Section[] } {
   const lines = md.replace(/\r\n/g, "\n").split("\n");
   const sections: Section[] = [];
   let current: Section = { heading: null, blocks: [] };
@@ -70,7 +74,7 @@ function parseNarrative(md: string): { summary: string; sections: Section[] } {
 }
 
 /** Minimal inline markdown -> React: **bold**, *italic*, `code`. */
-function inline(text: string, keyBase: string): ReactNode[] {
+export function inline(text: string, keyBase: string): ReactNode[] {
   const out: ReactNode[] = [];
   const re = /\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`/g;
   let last = 0;
@@ -120,15 +124,23 @@ interface Source {
 }
 
 const DOMAIN_RE = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
+/** Opaque redirect hosts that carry no publisher identity. */
+const REDIRECT_HOSTS = new Set(["vertexaisearch.cloud.google.com"]);
 
 /** Gemini grounding gives the publisher domain in `domain` (or as the `title`),
  * while the URL is an opaque vertexaisearch redirect. Prefer the real domain so
- * the favicon is the publisher's, not a generic globe. */
+ * the favicon is the publisher's, not a generic globe. Falls back to scanning the
+ * title for a domain-shaped token before giving up. */
 function iconDomainFor(domain: string | undefined, title: string, url: string): string {
   if (domain && DOMAIN_RE.test(domain)) return domain;
   const t = title.trim().toLowerCase();
   if (DOMAIN_RE.test(t)) return t;
-  return hostOf(url);
+  const host = hostOf(url);
+  if (host && !REDIRECT_HOSTS.has(host)) return host;
+  // scan title for a domain-shaped token (e.g. "Reuters.com - Finance")
+  const fromTitle = t.split(/[\s|·–\-,]+/).find((tok) => DOMAIN_RE.test(tok));
+  if (fromTitle) return fromTitle;
+  return host; // last resort - may be the redirect host but that's all we have
 }
 
 /** Build the "In the news" cards from live web citations PLUS the persisted
@@ -159,7 +171,109 @@ function buildSources(
   return out;
 }
 
-function Blocks({ blocks, kb }: { blocks: Block[]; kb: string }) {
+// ---------------------------------------------------------------------------
+// Favicon cache — stores data URIs in localStorage so favicons survive
+// page reloads and cached-analysis loads without a network round-trip.
+// ---------------------------------------------------------------------------
+
+const FAVI_STORE = "sf-fav-v1";
+let _faviMem: Record<string, string> | null = null;
+
+function getFaviCache(): Record<string, string> {
+  if (!_faviMem) {
+    try { _faviMem = JSON.parse(localStorage.getItem(FAVI_STORE) || "{}"); }
+    catch { _faviMem = {}; }
+  }
+  return _faviMem!;
+}
+
+function setCachedFavi(domain: string, dataUrl: string): void {
+  const c = getFaviCache();
+  c[domain] = dataUrl;
+  const keys = Object.keys(c);
+  if (keys.length > 300) delete c[keys[0]]; // simple LRU
+  try { localStorage.setItem(FAVI_STORE, JSON.stringify(c)); } catch { /* quota */ }
+}
+
+async function fetchFaviDataUrl(domain: string): Promise<string | null> {
+  try {
+    const url = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    if (blob.size > 20_000) return null; // skip unexpectedly large responses
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function FaviconImg({ domain }: { domain: string }) {
+  const letter = (domain || "?").charAt(0).toUpperCase();
+  const [src, setSrc] = useState<string | null>(() => getFaviCache()[domain] ?? null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (src || !domain || REDIRECT_HOSTS.has(domain)) return;
+    let cancelled = false;
+    fetchFaviDataUrl(domain).then((dataUrl) => {
+      if (cancelled) return;
+      if (dataUrl) {
+        setCachedFavi(domain, dataUrl);
+        setSrc(dataUrl);
+      } else {
+        setFailed(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [domain, src]);
+
+  if (failed || (!src && REDIRECT_HOSTS.has(domain))) {
+    return (
+      <div className="source-favicon source-favicon-letter" aria-hidden="true">
+        {letter}
+      </div>
+    );
+  }
+
+  if (!src) {
+    return <div className="source-favicon source-favicon-skeleton" aria-hidden="true" />;
+  }
+
+  return (
+    <img
+      className="source-favicon"
+      src={src}
+      alt=""
+      onError={() => { setSrc(null); setFailed(true); }}
+    />
+  );
+}
+
+function SourceCard({ s }: { s: Source }) {
+  return (
+    <a
+      className="source-card"
+      href={s.url}
+      target="_blank"
+      rel="noreferrer"
+      title={s.title}
+    >
+      <FaviconImg domain={s.iconDomain} />
+      <div className="source-meta">
+        <div className="source-title">{s.title}</div>
+        <div className="source-host">{s.label}</div>
+      </div>
+    </a>
+  );
+}
+
+export function Blocks({ blocks, kb }: { blocks: Block[]; kb: string }) {
   return (
     <>
       {blocks.map((b, i) =>
@@ -186,10 +300,12 @@ export function Synthesis({
   streaming,
 }: {
   narrative: string | null;
-  citations: Array<{ title: string; url: string }>;
+  citations: Array<{ title: string; url: string; domain?: string }>;
   findings?: Array<Record<string, unknown>>;
   streaming: boolean;
 }) {
+  const [showAllSources, setShowAllSources] = useState(false);
+
   if (!narrative) {
     return (
       <div className="synth-empty">
@@ -200,6 +316,8 @@ export function Synthesis({
 
   const { summary, sections } = parseNarrative(narrative);
   const sources = buildSources(citations, findings);
+  const preview = sources.slice(0, SOURCE_PREVIEW);
+  const hidden = sources.length - preview.length;
 
   return (
     <div className="synth">
@@ -223,28 +341,38 @@ export function Synthesis({
       {sources.length > 0 && (
         <div className="synth-sources">
           <div className="synth-sources-title">In the news · live web grounding</div>
-          <div className="source-cards">
-            {sources.map((s, i) => (
-              <a
-                key={i}
-                className="source-card"
-                href={s.url}
-                target="_blank"
-                rel="noreferrer"
-                title={s.title}
-              >
-                <img
-                  className="source-favicon"
-                  src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(s.iconDomain)}&sz=64`}
-                  alt=""
-                  loading="lazy"
-                />
-                <div className="source-meta">
-                  <div className="source-title">{s.title}</div>
-                  <div className="source-host">{s.label}</div>
-                </div>
-              </a>
+          <div className="source-cards source-cards-row">
+            {preview.map((s, i) => (
+              <SourceCard key={i} s={s} />
             ))}
+          </div>
+          {hidden > 0 && (
+            <button className="source-showall" onClick={() => setShowAllSources(true)}>
+              Show all {sources.length} sources
+            </button>
+          )}
+        </div>
+      )}
+
+      {showAllSources && (
+        <div className="overlay" onClick={() => setShowAllSources(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="hdr">
+              <h1 style={{ fontSize: 18 }}>In the news · all {sources.length} sources</h1>
+            </div>
+            <div className="muted" style={{ marginBottom: 12 }}>
+              Live web grounding behind the AI synthesis. Each links to the original publisher.
+            </div>
+            <div className="source-cards">
+              {sources.map((s, i) => (
+                <SourceCard key={i} s={s} />
+              ))}
+            </div>
+            <div style={{ marginTop: 16, textAlign: "right" }}>
+              <button className="btn" onClick={() => setShowAllSources(false)}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

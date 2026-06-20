@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { scoreColor } from "../themes";
+import { parseNarrative, inline, Blocks } from "./Synthesis";
 
-/** First real (non-heading) paragraph of the narrative: the AI's executive verdict. */
+/** First real (non-heading) paragraph: the AI's executive verdict for the card summary. */
 function verdictOf(narrative: string): string {
   return (
     narrative
@@ -40,27 +41,25 @@ export function CompositeCard({
           {compositePct.toFixed(0)}
           <span className="den">%</span>
         </div>
-        <p className="composite-verdict">{verdict}</p>
+        <p className="composite-verdict">{inline(verdict, "cv")}</p>
         {narrative && (
           <button className="info-pill" onClick={() => setOpen(true)}>
-            Click for info
+            More info
           </button>
         )}
       </div>
 
       {open && narrative && (
         <div className="overlay" onClick={() => setOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal composite-modal" onClick={(e) => e.stopPropagation()}>
             <div className="hdr">
-              <h1 style={{ fontSize: 18 }}>Composite result · why the AI thinks so</h1>
+              <h1 style={{ fontSize: 17 }}>Composite AI synthesis</h1>
               <span className="chip num" style={{ color: scoreColor(compositePct) }}>
                 {compositePct.toFixed(0)}%
               </span>
-            </div>
-
-            <div className="muted" style={{ marginBottom: 10 }}>
-              The composite blends the deterministic, code-computed dimensions below; the
-              narrative is the AI's qualitative read of those results.
+              <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => setOpen(false)}>
+                ✕
+              </button>
             </div>
 
             <div className="composite-dims">
@@ -78,27 +77,30 @@ export function CompositeCard({
             </div>
 
             <div className="composite-narrative">
-              {narrative
-                .replace(/\r\n/g, "\n")
-                .split(/\n{2,}/)
-                .map((p, i) => {
-                  const h = p.trim().match(/^#{1,3}\s+(.*)$/);
-                  return h ? (
-                    <h4 key={i} className="synth-h">
-                      {h[1]}
-                    </h4>
-                  ) : (
-                    <p key={i} className="synth-p">
-                      {p.trim()}
-                    </p>
-                  );
-                })}
+              {(() => {
+                const { summary, sections } = parseNarrative(narrative);
+                return (
+                  <>
+                    {summary && (
+                      <p className="cm-summary">{inline(summary, "csum")}</p>
+                    )}
+                    <div className="cm-sections">
+                      {sections.map((s, si) => (
+                        <div key={si} className="cm-section">
+                          {s.heading && (
+                            <h4 className="cm-heading">{inline(s.heading, `cmh${si}`)}</h4>
+                          )}
+                          <Blocks blocks={s.blocks} kb={`cms${si}`} />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
-            <div style={{ marginTop: 16, textAlign: "right" }}>
-              <button className="btn" onClick={() => setOpen(false)}>
-                Close
-              </button>
+            <div style={{ marginTop: 14, textAlign: "right" }}>
+              <button className="btn" onClick={() => setOpen(false)}>Close</button>
             </div>
           </div>
         </div>

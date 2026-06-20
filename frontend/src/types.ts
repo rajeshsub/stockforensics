@@ -57,6 +57,7 @@ export interface CompanyDetail {
   promoter_live: boolean;
   scores: Record<string, DimensionDetail>;
   narrative: string | null;
+  composite_narrative: string | null;
   promoter_findings: Array<Record<string, unknown>>;
   citations: Array<{ title: string; url: string; domain?: string }>;
 }
@@ -84,7 +85,7 @@ export type StreamHandlers = {
   onStage?: (d: { stage: string; message: string }) => void;
   onToken?: (d: { text: string }) => void;
   onCitation?: (d: { title: string; url: string; domain?: string }) => void;
-  onScores?: (d: { ticker: string; narrative: string; promoter: DimensionDetail; composite_pct: number; scores: Record<string, DimensionDetail> }) => void;
+  onScores?: (d: { ticker: string; narrative: string; composite_narrative?: string; promoter: DimensionDetail; composite_pct: number; scores: Record<string, DimensionDetail> }) => void;
   onCached?: (d: { age_minutes: number }) => void;
   onError?: (d: { message: string }) => void;
   onDone?: () => void;

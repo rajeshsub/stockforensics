@@ -10,6 +10,7 @@ export interface CachedAnalysis {
   stages: Stage[];
   citations: Array<{ title: string; url: string; domain?: string }>;
   narrative: string | null;
+  compositeNarrative: string | null;
   scores: Record<string, DimensionDetail> | null;
   completedAt: number; // epoch ms
 }
@@ -17,7 +18,7 @@ export interface CachedAnalysis {
 const TTL_MS = 4 * 60 * 60 * 1000; // 4h, matches backend _ANALYSIS_TTL_S
 // Bump the version suffix when the cached shape changes (e.g. citation `domain`
 // added) so stale pre-change entries are ignored instead of overriding fresh data.
-const key = (ticker: string) => `sf-analysis-v3-${ticker.toUpperCase()}`;
+const key = (ticker: string) => `sf-analysis-v5-${ticker.toUpperCase()}`;
 
 export function loadAnalysis(ticker: string): CachedAnalysis | null {
   try {

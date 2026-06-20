@@ -87,6 +87,10 @@ class LlmClient(Protocol):
         (replaces Tavily, Q17); returned dict may include a 'citations' list."""
         ...
 
+    def generate_text(self, prompt: str) -> str:
+        """Plain-prose completion (no grounding, no JSON) for short rationales."""
+        ...
+
 
 class VectorClient(Protocol):
     def upsert(self, namespace: str, items: list[VectorItem]) -> None: ...

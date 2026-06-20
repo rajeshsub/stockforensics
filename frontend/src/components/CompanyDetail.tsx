@@ -18,6 +18,7 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
   const [streaming, setStreaming] = useState(false);
   const [stages, setStages] = useState<Stage[]>([]);
   const [liveNarrative, setLiveNarrative] = useState<string | null>(null);
+  const [liveCompositeNarrative, setLiveCompositeNarrative] = useState<string | null>(null);
   const [cachedAgeMinutes, setCachedAgeMinutes] = useState<number | null>(null);
   const [citations, setCitations] = useState<Array<{ title: string; url: string; domain?: string }>>(
     [],
@@ -40,6 +41,7 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
       setStages(cached.stages);
       setCitations(cached.citations);
       setLiveNarrative(cached.narrative);
+      setLiveCompositeNarrative(cached.compositeNarrative);
       setLive(cached.scores);
       setCachedAgeMinutes(Math.max(0, Math.floor((Date.now() - cached.completedAt) / 60000)));
       setStreaming(false);
@@ -49,6 +51,7 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
     setStreaming(true);
     setStages([]);
     setLiveNarrative(null);
+    setLiveCompositeNarrative(null);
     setCachedAgeMinutes(null);
     setCitations([]);
     setLive(null);
@@ -58,6 +61,7 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
       stages: [] as Stage[],
       citations: [] as Array<{ title: string; url: string; domain?: string }>,
       narrative: null as string | null,
+      compositeNarrative: null as string | null,
       scores: null as Record<string, DimensionDetail> | null,
     };
     return analyzeStream(ticker, {
@@ -72,8 +76,10 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
       onScores: (d) => {
         acc.scores = d.scores;
         acc.narrative = d.narrative;
+        acc.compositeNarrative = d.composite_narrative ?? null;
         setLive(d.scores);
         setLiveNarrative(d.narrative);
+        setLiveCompositeNarrative(d.composite_narrative ?? null);
       },
       onCached: (d) => setCachedAgeMinutes(d.age_minutes),
       onError: (e) => {
@@ -88,6 +94,7 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
             stages: acc.stages,
             citations: acc.citations,
             narrative: acc.narrative,
+            compositeNarrative: acc.compositeNarrative,
             scores: acc.scores,
             completedAt: Date.now(),
           });
@@ -200,7 +207,7 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
         })}
         <CompositeCard
           compositePct={composite}
-          narrative={liveNarrative || detail.narrative}
+          narrative={liveCompositeNarrative || detail.composite_narrative}
           dims={radar}
           streaming={streaming}
         />

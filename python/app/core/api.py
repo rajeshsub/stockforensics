@@ -109,6 +109,7 @@ def _detail(c: CompanyScore) -> dict[str, Any]:
         "promoter_live": c.promoter_live,
         "scores": c.scores,
         "narrative": c.narrative,
+        "composite_narrative": c.composite_narrative,
         "promoter_findings": c.promoter_findings,
         "citations": c.citations or [],
     }

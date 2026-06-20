@@ -81,19 +81,21 @@ export function Leaderboard({
       <div className="panel">
         <div className="section-title">Click a company to run live AI analysis</div>
         <div className="heat">
-          <div className="h" onClick={() => setSort("ticker")}>
-            Company
-          </div>
-          {COLS.map((col) => (
-            <div key={col.key} className="h" onClick={() => setSort(col.key)}>
-              {col.label} {sort === col.key ? "▾" : ""}
+          <div className="heat-head">
+            <div className="h" onClick={() => setSort("ticker")}>
+              Company
             </div>
-          ))}
-          <div className="h" onClick={() => setSort("promoter")}>
-            Promoter
-          </div>
-          <div className="h" onClick={() => setSort("composite")}>
-            Avg {sort === "composite" ? "▾" : ""}
+            {COLS.map((col) => (
+              <div key={col.key} className="h" onClick={() => setSort(col.key)}>
+                {col.label} {sort === col.key ? "▾" : ""}
+              </div>
+            ))}
+            <div className="h" onClick={() => setSort("promoter")}>
+              Promoter
+            </div>
+            <div className="h" onClick={() => setSort("composite")}>
+              Avg {sort === "composite" ? "▾" : ""}
+            </div>
           </div>
 
           {rows.map((c) => (
@@ -113,10 +115,21 @@ export function Leaderboard({
 function Row({ c, onSelect }: { c: CompanySummary; onSelect: (t: string) => void }) {
   const { label, cls } = aiStatusInfo(c.analyzed_at);
   return (
-    <>
-      <div className="co" onClick={() => onSelect(c.ticker)}>
-        {c.ticker}
-        <div className="muted">{c.name}</div>
+    <div
+      className="heat-row"
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(c.ticker)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(c.ticker);
+        }
+      }}
+    >
+      <div className="co">
+        <span className="co-ticker">{c.ticker}</span>
+        <span className="co-name muted">{c.name}</span>
         <div className={`ai-tag ${cls}`}>{label}</div>
       </div>
       {COLS.map((col) => (
@@ -132,6 +145,6 @@ function Row({ c, onSelect }: { c: CompanySummary; onSelect: (t: string) => void
       <div className="cell num" style={{ color: scoreColor(c.composite_pct) }}>
         {fmtPct(c.composite_pct)}
       </div>
-    </>
+    </div>
   );
 }
