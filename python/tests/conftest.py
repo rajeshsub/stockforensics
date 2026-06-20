@@ -59,6 +59,7 @@ def temp_db(tmp_path, monkeypatch):
 
     db = str(tmp_path / "t.db")
     monkeypatch.setenv("SQLITE_PATH", db)
+    monkeypatch.setenv("API_KEY", "")  # disable gateway auth in tests
     get_settings.cache_clear()
     get_engine.cache_clear()
     migrate()

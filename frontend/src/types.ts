@@ -19,6 +19,7 @@ export interface CompanySummary {
   composite_pct: number; // 4-dim deterministic
   scores: Record<string, DimScore>;
   promoter: PromoterCell;
+  analyzed_at: string | null; // ISO UTC timestamp of last AI run; null if never run
 }
 
 export interface BreakdownRow {
@@ -69,7 +70,7 @@ export interface MarketQuote {
 }
 
 export const DIMENSIONS = [
-  { key: "graham", label: "Graham", max: 7 },
+  { key: "graham", label: "Graham", max: 6 },
   { key: "buffett", label: "Buffett Quality", max: 10 },
   { key: "munger", label: "Munger Composite", max: 10 },
   { key: "earnings_quality", label: "Earnings Quality", max: 10 },
@@ -82,7 +83,8 @@ export type StreamHandlers = {
   onStage?: (d: { stage: string; message: string }) => void;
   onToken?: (d: { text: string }) => void;
   onCitation?: (d: { title: string; url: string }) => void;
-  onScores?: (d: { ticker: string; promoter: DimensionDetail; composite_pct: number; scores: Record<string, DimensionDetail> }) => void;
+  onScores?: (d: { ticker: string; narrative: string; promoter: DimensionDetail; composite_pct: number; scores: Record<string, DimensionDetail> }) => void;
+  onCached?: (d: { age_minutes: number }) => void;
   onError?: (d: { message: string }) => void;
   onDone?: () => void;
 };

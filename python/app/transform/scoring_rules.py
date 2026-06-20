@@ -529,14 +529,13 @@ def _c(
 DIMENSIONS: dict[str, DimensionSpec] = {
     "graham": DimensionSpec(
         "Graham Score",
-        7.0,
+        6.0,
         [
-            _c("pe_below_15", "P/E < 15", 0.20, ev_pe),
+            _c("pe_below_15", "P/E < 15", 0.25, ev_pe),
             _c("pb_below_1_5", "P/B < 1.5", 0.15, ev_pb),
             _c("current_ratio_gt_2", "Current ratio > 2", 0.15, ev_current_ratio),
-            _c("de_below_0_5", "D/E < 0.5", 0.20, ev_de),
+            _c("de_below_0_5", "D/E < 0.5", 0.25, ev_de),
             _c("positive_eps_5yr", "Positive EPS (5yr)", 0.10, ev_positive_eps),
-            _c("dividend_paid_5yr", "Dividend paid (5yr)", 0.10, ev_dividend),
             _c("earnings_growth_5yr", "EPS growth > 0 (5yr)", 0.10, ev_eps_growth),
         ],
     ),

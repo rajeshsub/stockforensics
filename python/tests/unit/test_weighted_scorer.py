@@ -24,15 +24,15 @@ def test_deterministic_composite_excludes_promoter(aapl):
 
 def test_aapl_graham_perfect(aapl):
     d = score_dimension("graham", aapl)
-    assert d.score == pytest.approx(7.0)
-    assert d.max_score == pytest.approx(7.0)
+    assert d.score == pytest.approx(6.0)
+    assert d.max_score == pytest.approx(6.0)
     assert d.normalized_pct == pytest.approx(100.0)
     assert d.confidence == pytest.approx(1.0)
 
 
 def test_msft_graham_fails_some(msft):
     d = score_dimension("graham", msft)
-    assert d.score < 7.0
+    assert d.score < 6.0
     # P/E 28, P/B 6, current-ratio 1.8 all fail
     fails = {c.key for c in d.criteria if c.status is Status.FAIL}
     assert {"pe_below_15", "pb_below_1_5", "current_ratio_gt_2"} <= fails

@@ -87,7 +87,7 @@ def test_analyze_company_promoter_live(temp_db, fixture_adapters):
 def test_analyze_stream_emits_events(seeded, fixture_adapters):
     events = list(analyze_stream(fixture_adapters, "AAPL"))
     text = "".join(events)
-    for etype in ("stage", "token", "scores", "done"):
+    for etype in ("stage", "scores", "done"):
         assert f"event: {etype}" in text
     # SSE framing
     assert text.startswith("event: stage")

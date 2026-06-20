@@ -15,9 +15,10 @@ from app.core.logging import configure_logging, get_logger
 
 
 def test_settings_defaults_and_clamp():
-    s = Settings(top_n=500)
+    # Pass explicit empty keys so the test is isolated from whatever .env has
+    s = Settings(top_n=500, gemini_api_key="", api_key="")
     assert s.top_n_clamped == 100
-    assert Settings(top_n=0).top_n_clamped == 1
+    assert Settings(top_n=0, gemini_api_key="", api_key="").top_n_clamped == 1
     assert s.has("sec_user_agent") is True
     assert s.has("gemini_api_key") is False  # empty by default
     assert s.poll_interval_s == 10 and s.poll_max == 60

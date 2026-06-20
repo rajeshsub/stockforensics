@@ -27,7 +27,7 @@ export function Breakdown({ dim, onClose }: { dim: DimensionDetail; onClose: () 
                 <td title={b.reason ?? ""}>{b.criterion}</td>
                 <td>
                   <span className={`tag ${b.provenance === "CODE" ? "code" : "llm"}`}>
-                    {b.provenance === "CODE" ? "CODE" : "LLM"}
+                    {b.provenance === "CODE" ? "SEC EDGAR" : "LLM"}
                   </span>
                 </td>
                 <td className="r num">{b.value ?? "–"}</td>

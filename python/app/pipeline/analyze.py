@@ -130,38 +130,20 @@ def analyze_stream(adapters: Adapters, ticker: str) -> Iterator[str]:
         matches = adapters.vector.query(tk, qvec, top_k=4)
         context = "\n".join(str(m.metadata.get("text", "")) for m in matches)
 
-    yield _sse(
-        {
-            "type": "stage",
-            "stage": "reasoning",
-            "message": "Searching the web and synthesising (live)…",
-        }
-    )
+    yield _stage("reasoning", "Searching the web and synthesising (live)…")
     prompt = build_prompt(tk, context)
-    narrative_parts: list[str] = []
-    for token in adapters.llm.generate_stream(prompt):
-        narrative_parts.append(token)
-        yield _sse({"type": "token", "text": token})
-
-    yield _sse(
-        {
-            "type": "stage",
-            "stage": "evidence",
-            "message": "Extracting governance evidence + citations…",
-        }
-    )
     raw = adapters.llm.generate_json(prompt, grounded=True)
     contract = validate_agent_output(raw)
+
+    yield _stage("evidence", "Extracting governance evidence + citations…")
     for cite in raw.get("citations", []):
         yield _sse({"type": "citation", "title": cite.get("title", ""), "url": cite.get("url", "")})
 
-    yield _sse(
-        {"type": "stage", "stage": "scoring", "message": "Thresholding evidence + scoring (code)…"}
-    )
+    yield _stage("scoring", "Thresholding evidence + scoring (code)…")
     with session_scope() as session:
         cd, cik, name = _assemble_live(adapters, session, tk, contract["promoter_findings"])
         dims = score_all(cd)
-        narrative = "".join(narrative_parts).strip() or contract["narrative"]
+        narrative = contract["narrative"]
         save_company_score(
             session, cd, dims, name=name, cik=cik, narrative=narrative, promoter_live=True
         )
@@ -172,6 +154,7 @@ def analyze_stream(adapters: Adapters, ticker: str) -> Iterator[str]:
         {
             "type": "scores",
             "ticker": tk,
+            "narrative": narrative,
             "promoter": promoter,
             "composite_pct": full_composite,
             "scores": {k: v.to_dict() for k, v in dims.items()},

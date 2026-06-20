@@ -10,7 +10,7 @@ from pinecone import Pinecone, ServerlessSpec
 from app.adapters.protocols import VectorItem, VectorMatch
 from app.core.config import Settings
 
-EMBED_DIM = 768  # Gemini text-embedding-004
+EMBED_DIM = 3072  # gemini-embedding-001
 
 
 class PineconeVectorClient:

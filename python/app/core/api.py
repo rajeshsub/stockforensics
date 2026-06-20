@@ -3,6 +3,9 @@ Thin shell over the pure WeightedScorer; no network/LLM in the recalc path."""
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
@@ -77,6 +80,9 @@ def _summary(c: CompanyScore) -> dict[str, Any]:
         if c.promoter_live and "promoter_integrity" in c.scores
         else {"placeholder": PROMOTER_PLACEHOLDER, "live": False}
     )
+    analyzed_at = (
+        c.run_date.replace(tzinfo=UTC).isoformat() if c.promoter_live and c.run_date else None
+    )
     return {
         "ticker": c.ticker,
         "name": c.name,
@@ -85,6 +91,7 @@ def _summary(c: CompanyScore) -> dict[str, Any]:
         "composite_pct": c.composite_pct,  # 4-dim
         "scores": scores,
         "promoter": promoter,
+        "analyzed_at": analyzed_at,
     }
 
 
@@ -191,10 +198,46 @@ def analysis_run(bg: BackgroundTasks) -> dict[str, str]:
     return {"status": "started"}
 
 
+_ANALYSIS_TTL_S = 14400  # 4 hours  # 1 hour
+
+
+def _sse(event: dict[str, Any]) -> str:
+    return f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
+
+
+def _cached_analysis_stream(c: CompanyScore, age_s: float) -> Iterator[str]:
+    age_min = int(age_s // 60)
+    yield _sse({"type": "cached", "age_minutes": age_min})
+    avail = [v["normalized_pct"] for v in c.scores.values() if v.get("max_score", 0) > 0]
+    full_composite = round(sum(avail) / len(avail), 1) if avail else 0.0
+    yield _sse({
+        "type": "scores",
+        "ticker": c.ticker,
+        "narrative": c.narrative or "",
+        "promoter": c.scores.get("promoter_integrity", {}),
+        "composite_pct": full_composite,
+        "scores": c.scores,
+    })
+    yield _sse({"type": "done", "ticker": c.ticker})
+
+
 @app.get("/api/analyze/{ticker}/stream")
 def analyze_stream_endpoint(ticker: str) -> StreamingResponse:
     """Lazy, live, streamed AI analysis of one selected stock (Q15, Q16).
-    Server-Sent Events: stage / token / citation / scores / done."""
+    Server-Sent Events: stage / token / citation / scores / done.
+    Returns cached result immediately if a live analysis ran within the last hour."""
+    tk = ticker.upper()
+    with session_scope() as sess:
+        c = get_company(sess, tk)
+        if c and c.promoter_live and c.run_date:
+            run_dt = c.run_date if c.run_date.tzinfo else c.run_date.replace(tzinfo=UTC)
+            age_s = (datetime.now(UTC) - run_dt).total_seconds()
+            if age_s < _ANALYSIS_TTL_S:
+                return StreamingResponse(
+                    _cached_analysis_stream(c, age_s),
+                    media_type="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+                )
     adapters = build_adapters(get_settings())
     gen = analyze_stream(adapters, ticker)
     return StreamingResponse(

@@ -43,6 +43,7 @@ export function analyzeStream(ticker: string, h: StreamHandlers): () => void {
   if (h.onToken) on("token", h.onToken);
   if (h.onCitation) on("citation", h.onCitation);
   if (h.onScores) on("scores", h.onScores);
+  if (h.onCached) on("cached", h.onCached);
   if (h.onError) on("error", h.onError);
   on("done", () => {
     h.onDone?.();

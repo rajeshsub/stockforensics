@@ -58,11 +58,11 @@ data still work; LLM stages skip.
 
 | Dimension | Range | Source |
 |-----------|-------|--------|
-| Graham | 0–7 | CODE: 7 valuation/safety criteria |
-| Buffett Quality | 0–10 | CODE: ROE/margin/FCF consistency |
-| Munger Composite | 0–10 | CODE: quality / value / capital efficiency |
-| Earnings Quality | 0–10 | CODE: cash-vs-earnings, accruals, red flags |
-| Promoter Integrity | 0–10 | HYBRID: CODE (ownership, insider) + LLM-EVIDENCE (tenure, SEC, criminal, related-party), code-thresholded |
+| Graham | 0–6 | SEC EDGAR: 6 valuation/safety criteria (dividend excluded; shown separately) |
+| Buffett Quality | 0–10 | SEC EDGAR: ROE/margin/FCF consistency |
+| Munger Composite | 0–10 | SEC EDGAR: quality / value / capital efficiency |
+| Earnings Quality | 0–10 | SEC EDGAR: cash-vs-earnings, accruals, red flags |
+| Promoter Integrity | 0–10 | HYBRID: SEC EDGAR (ownership, insider) + LLM (tenure, SEC, criminal, related-party), code-thresholded |
 
 Every criterion is PASS / FAIL / NA; missing data window-degrades or NA-drops and
 weights renormalise. Leaderboard ranks on the 4 deterministic dims (comparable);

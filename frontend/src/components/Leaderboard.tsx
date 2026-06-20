@@ -9,6 +9,33 @@ const COLS = [
   { key: "earnings_quality", label: "EarnQ" },
 ] as const;
 
+const ANALYSIS_TTL_MS = 4 * 60 * 60 * 1000;
+
+function fmtDuration(ms: number): string {
+  const totalMin = Math.floor(ms / 60000);
+  if (totalMin < 1) return "< 1 min";
+  if (totalMin < 60) return `${totalMin}m`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function aiStatusInfo(analyzedAt: string | null): { label: string; cls: string } {
+  if (!analyzedAt) return { label: "Not yet analysed", cls: "pending" };
+  const ageMs = Date.now() - new Date(analyzedAt).getTime();
+  const expiresInMs = ANALYSIS_TTL_MS - ageMs;
+  if (expiresInMs <= 0) {
+    return {
+      label: `Last analysed ${fmtDuration(ageMs)} ago - will refresh on next click`,
+      cls: "stale",
+    };
+  }
+  return {
+    label: `Analysed ${fmtDuration(ageMs)} ago - cached for ${fmtDuration(expiresInMs)} more`,
+    cls: "fresh",
+  };
+}
+
 function Cell({ pct }: { pct: number }) {
   const c = scoreColor(pct);
   return (
@@ -78,11 +105,13 @@ export function Leaderboard({
 }
 
 function Row({ c, onSelect }: { c: CompanySummary; onSelect: (t: string) => void }) {
+  const { label, cls } = aiStatusInfo(c.analyzed_at);
   return (
     <>
       <div className="co" onClick={() => onSelect(c.ticker)}>
         {c.ticker}
         <div className="muted">{c.name}</div>
+        <div className={`ai-tag ${cls}`}>{label}</div>
       </div>
       {COLS.map((col) => (
         <Cell key={col.key} pct={c.scores[col.key]?.normalized_pct ?? 0} />

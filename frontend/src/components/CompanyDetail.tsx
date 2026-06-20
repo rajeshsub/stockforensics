@@ -14,7 +14,8 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
   const [overrides, setOverrides] = useState<Record<string, DimensionDetail>>({});
   const [streaming, setStreaming] = useState(false);
   const [stages, setStages] = useState<Stage[]>([]);
-  const [tokens, setTokens] = useState("");
+  const [liveNarrative, setLiveNarrative] = useState<string | null>(null);
+  const [cachedAgeMinutes, setCachedAgeMinutes] = useState<number | null>(null);
   const [citations, setCitations] = useState<Array<{ title: string; url: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [breakdown, setBreakdown] = useState<DimensionDetail | null>(null);
@@ -29,14 +30,15 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
   useEffect(() => {
     setStreaming(true);
     setStages([]);
-    setTokens("");
+    setLiveNarrative(null);
+    setCachedAgeMinutes(null);
     setCitations([]);
     setLive(null);
     return analyzeStream(ticker, {
       onStage: (s) => setStages((p) => [...p, s]),
-      onToken: (t) => setTokens((p) => p + t.text),
       onCitation: (c) => setCitations((p) => [...p, c]),
-      onScores: (d) => setLive(d.scores),
+      onScores: (d) => { setLive(d.scores); setLiveNarrative(d.narrative); },
+      onCached: (d) => setCachedAgeMinutes(d.age_minutes),
       onError: (e) => {
         setError(e.message);
         setStreaming(false);
@@ -109,9 +111,14 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
         <span className="chip num" style={{ color: scoreColor(composite) }}>
           composite {composite.toFixed(0)}%
         </span>
-        {streaming && (
+        {streaming && cachedAgeMinutes === null && (
           <span className="live-badge">
             <span className="live-dot" /> AI analysing live, fetching up-to-the-minute data
+          </span>
+        )}
+        {cachedAgeMinutes !== null && (
+          <span className="live-badge stale">
+            Analysis from {cachedAgeMinutes < 1 ? "less than a minute" : cachedAgeMinutes === 1 ? "1 minute" : `${cachedAgeMinutes} minutes`} ago, not refreshing
           </span>
         )}
       </div>
@@ -149,7 +156,7 @@ export function CompanyDetail({ ticker, onBack }: { ticker: string; onBack: () =
         <div className="panel">
           <div className="section-title">Qualitative synthesis (AI, display-only)</div>
           <div style={{ lineHeight: 1.55 }}>
-            {tokens || detail.narrative || (streaming ? "…" : "No narrative yet.")}
+            {liveNarrative || detail.narrative || (streaming ? "…" : "No narrative yet.")}
           </div>
         </div>
       </div>
