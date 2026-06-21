@@ -40,7 +40,12 @@ RUN uv sync --locked --no-dev
 COPY --from=frontend --chown=user:user /app/frontend/dist /home/user/app/frontend/dist
 RUN mkdir -p /home/user/app/data
 
+# Seed an offline baseline at BUILD time so the DB is ready before the container boots.
+# This lets uvicorn bind port 7860 immediately on startup, matching the working Space.
+# HF marks the Space "Running" as soon as the port responds, so a slow first-boot seed
+# can no longer hold the port closed and leave the Space stuck on "Starting".
+# The embedded scheduler (and POST /api/analysis/run) refresh it with live data later.
+RUN uv run --no-sync python -m app.db.seed
+
 EXPOSE 7860
-# Seed an offline baseline so the leaderboard isn't empty on first boot, then serve.
-# The embedded scheduler (and POST /api/analysis/run) refresh it with live data.
-CMD ["sh", "-c", "uv run --no-sync python -m app.db.seed && uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 7860"]
+CMD ["/home/user/app/python/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]

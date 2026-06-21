@@ -4,12 +4,13 @@ Thin shell over the pure WeightedScorer; no network/LLM in the recalc path."""
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -51,6 +52,12 @@ class _APIKeyMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(_APIKeyMiddleware)
+
+
+_DIST = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "frontend", "dist")
+)
+_INDEX = os.path.join(_DIST, "index.html")
 
 
 class RecalcRequest(BaseModel):
@@ -118,6 +125,21 @@ def _detail(c: CompanyScore) -> dict[str, Any]:
 def _check_dimension(dimension: str) -> None:
     if dimension not in DIMENSION_KEYS:
         raise HTTPException(404, f"unknown dimension '{dimension}'")
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/", include_in_schema=False)
+def root() -> Response:
+    if os.path.isfile(_INDEX):
+        return FileResponse(_INDEX)
+    return HTMLResponse(
+        "<!doctype html><title>StockForensics</title>" "<h1>StockForensics API is running.</h1>",
+        status_code=200,
+    )
 
 
 @app.get("/health")
@@ -302,17 +324,12 @@ def market_quote(ticker: str) -> dict[str, Any]:
 
 
 def _mount_spa() -> None:
-    """Serve the built React SPA (single backend, Q14). Mounted LAST so all API
-    routes take precedence; no-op when the frontend hasn't been built."""
-    import os
-
+    """Serve static assets from the built React SPA (single backend, Q14).
+    Mounted LAST so all API routes take precedence."""
     from fastapi.staticfiles import StaticFiles
 
-    dist = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "..", "frontend", "dist")
-    )
-    if os.path.isdir(dist):
-        app.mount("/", StaticFiles(directory=dist, html=True), name="spa")
+    if os.path.isdir(_DIST):
+        app.mount("/", StaticFiles(directory=_DIST, html=True), name="spa")
 
 
 _mount_spa()

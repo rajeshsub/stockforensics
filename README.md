@@ -1,3 +1,13 @@
+---
+title: StockForensics
+emoji: 📈
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # StockForensics
 
 Value-investing analysis over the top S&P 500 companies. Computes Graham, Buffett,

@@ -26,23 +26,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepend Hugging Face Space metadata to README
-        run: |
-          tmp="$(mktemp)"
-          cat > "$tmp" <<'EOF'
-          ---
-          title: StockForensics
-          emoji: 📈
-          colorFrom: blue
-          colorTo: indigo
-          sdk: docker
-          app_port: 7860
-          pinned: false
-          ---
-
-          EOF
-          cat README.md >> "$tmp"
-          mv "$tmp" README.md
+      # The Hugging Face Space metadata (sdk: docker, app_port: 7860, ...) lives in
+      # README.md front matter committed to the repo, so it deploys verbatim. Do not
+      # re-inject it here: HF reads app_port only from that front matter, and losing
+      # it leaves the Space unroutable (stuck on "Starting").
 
       - name: Provision GEMINI_API_KEY as a Space secret
         if: ${{ env.GEMINI_API_KEY != '' }}
@@ -64,8 +51,6 @@ jobs:
           owner="${HF_SPACE_ID%%/*}"
           git config user.email "github-actions@users.noreply.github.com"
           git config user.name "github-actions"
-          git add README.md
-          git commit -m "ci: add Hugging Face Space metadata" || true
 
           # Hugging Face rejects raw binary blobs; track them with Git LFS.
           # The deploy checkout is throwaway and force-pushed, so rewriting
