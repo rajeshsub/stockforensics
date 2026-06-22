@@ -70,7 +70,9 @@ def _resolve_redirects(cites: list[dict[str, str]]) -> None:
         return
     with httpx.Client() as client, concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
         for c, (final, host) in zip(
-            pending, ex.map(lambda c: _publisher(client, c["url"]), pending), strict=True
+            pending,
+            ex.map(lambda c: _publisher(client, c["url"]), pending),
+            strict=True,
         ):
             if host:
                 c["url"] = final
@@ -99,11 +101,16 @@ def _citations(response: Any) -> list[dict[str, str]]:
 class GeminiLlmClient:
     def __init__(self, settings: Settings) -> None:
         self._client = genai.Client(api_key=settings.gemini_api_key)
+        # text-embedding-004 is only available on the stable v1 API, not v1beta
+        self._embed_client = genai.Client(
+            api_key=settings.gemini_api_key,
+            http_options={"api_version": "v1"},
+        )
         self._model = settings.gemini_model
         self._embed_model = settings.gemini_embed_model
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        resp = self._client.models.embed_content(model=self._embed_model, contents=texts)
+        resp = self._embed_client.models.embed_content(model=self._embed_model, contents=texts)
         return [list(e.values or []) for e in (resp.embeddings or [])]
 
     def generate_stream(self, prompt: str) -> Iterator[str]:

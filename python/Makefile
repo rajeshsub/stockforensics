@@ -1,15 +1,7 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-# On Windows the bare `npm` resolves to an extensionless launcher that Git Bash
-# cannot exec ("No such file or directory"); the .cmd shim is the one that runs.
-ifeq ($(OS),Windows_NT)
-NPM := npm.cmd
-else
-NPM := npm
-endif
-
-.PHONY: help bootstrap dev run-dev run-batch test smoke lint typecheck security refresh-universe clean
+.PHONY: help bootstrap dev run-batch test smoke lint typecheck security refresh-universe clean
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -23,15 +15,8 @@ bootstrap: ## One-step offline setup: venv, deps, hooks, .env, DB, seed
 	uv run python -m app.db.seed
 	@echo "Bootstrap complete. Paste API keys into .env, then 'make run-batch'."
 
-dev: ## Start backend (:8000) + frontend (:5173) with hot reload
-	@[ -d ../frontend/node_modules ] || (cd ../frontend && $(NPM) install)
-	@trap 'kill 0' EXIT; \
-	uv run uvicorn app.main:app --reload --port 8000 & \
-	(cd ../frontend && $(NPM) run dev) & \
-	wait
-
-run-dev: ## Run FastAPI (uvicorn) on :8000
-	uv run uvicorn app.main:app --reload --port 8000
+dev: ## Run Streamlit app on localhost:8501 (hot reload)
+	uv run streamlit run ../streamlit_app.py
 
 run-batch: ## Run one ETL+score batch
 	uv run python -m app.pipeline.runner

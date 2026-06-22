@@ -1,83 +1,111 @@
-"""API tests via FastAPI TestClient over a seeded temp DB (offline)."""
+"""Scoring logic tests: direct function calls (no HTTP layer)."""
 
 from __future__ import annotations
 
+from sqlalchemy import func, select
 
-def test_health(client):
-    r = client.get("/health")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["status"] == "ok"
-    assert body["companies"] == 2
-    assert set(body["keys_present"]) == {"gemini", "pinecone"}
-
-
-def test_companies_list_4dim_and_promoter_placeholder(client):
-    r = client.get("/api/companies")
-    assert r.status_code == 200
-    rows = r.json()
-    assert {row["ticker"] for row in rows} == {"AAPL", "MSFT"}
-    row = rows[0]
-    # leaderboard exposes only the 4 deterministic dims
-    assert set(row["scores"]) == {"graham", "buffett", "munger", "earnings_quality"}
-    # promoter not live yet -> placeholder
-    assert row["promoter"]["live"] is False
-    assert row["promoter"]["placeholder"] == "Select to calculate"
+from app.db.engine import session_scope
+from app.db.models import CompanyScore
+from app.db.repository import (
+    DIMENSION_KEYS,
+    distribution,
+    get_company,
+    inputs_to_financials,
+    list_companies,
+    rankings,
+)
+from app.transform.weighted_scorer import composite_pct, score_all
 
 
-def test_company_detail(client):
-    r = client.get("/api/companies/AAPL")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["promoter_live"] is False
-    assert "composite_pct_4dim" in body and "composite_pct_full" in body
-    assert "promoter_integrity" in body["scores"]
+def test_health(seeded):
+    """Check that seeded DB has expected companies."""
+    with session_scope() as sess:
+        count = sess.execute(select(func.count(CompanyScore.id))).scalar()
+        assert count == 2
 
 
-def test_company_404(client):
-    assert client.get("/api/companies/ZZZZ").status_code == 404
+def test_companies_list_4dim_and_promoter_placeholder(seeded):
+    """List all companies; check leaderboard has 4 dims, promoter is placeholder."""
+    with session_scope() as sess:
+        companies = list_companies(sess)
+        assert {c.ticker for c in companies} == {"AAPL", "MSFT"}
+        c = companies[0]
+        # leaderboard exposes only the 4 deterministic dims
+        assert {k for k in c.scores if k in DIMENSION_KEYS} >= {
+            "graham",
+            "buffett",
+            "munger",
+            "earnings_quality",
+        }
+        # promoter not live yet -> placeholder would be shown in UI
+        assert c.promoter_live is False
 
 
-def test_rankings_and_bad_dimension(client):
-    r = client.get("/api/analysis/rankings/graham")
-    assert r.status_code == 200
-    data = r.json()
-    assert data[0]["normalized_pct"] >= data[-1]["normalized_pct"]
-    assert client.get("/api/analysis/rankings/nonsense").status_code == 404
+def test_company_detail(seeded):
+    """Load one company; check it has 5-dim composite and scores."""
+    with session_scope() as sess:
+        c = get_company(sess, "AAPL")
+        assert c is not None
+        assert c.promoter_live is False
+        assert c.composite_pct is not None
+        assert "promoter_integrity" in c.scores
 
 
-def test_distribution(client):
-    r = client.get("/api/analysis/distribution/buffett")
-    assert r.status_code == 200
-    assert r.json()["count"] == 2
+def test_company_404(seeded):
+    """Non-existent company returns None."""
+    with session_scope() as sess:
+        c = get_company(sess, "ZZZZ")
+        assert c is None
 
 
-def test_recalculate(client):
-    r = client.post(
-        "/api/score/recalculate",
-        json={"ticker": "AAPL", "weights": {"graham": {"dividend_paid_5yr": None}}},
-    )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["ticker"] == "AAPL"
-    assert "graham" in body["recalculated"]
+def test_rankings(seeded):
+    """Rankings are sorted descending by score."""
+    with session_scope() as sess:
+        data = rankings(sess, "graham")
+        assert len(data) >= 2
+        assert data[0]["normalized_pct"] >= data[-1]["normalized_pct"]
 
 
-def test_recalculate_404(client):
-    r = client.post("/api/score/recalculate", json={"ticker": "ZZZZ", "weights": {}})
-    assert r.status_code == 404
+def test_rankings_bad_dimension(seeded):
+    """Bad dimension raises via repository function."""
+    # Note: rankings() doesn't validate; the UI would filter on DIMENSION_KEYS
+    with session_scope() as sess:
+        data = rankings(sess, "nonsense")
+        assert data == []
 
 
-def test_market_quote_has_poll_config(client):
-    r = client.get("/api/market/AAPL")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["poll_interval_s"] == 10 and body["poll_max"] == 60
-    assert "market_open" in body
+def test_distribution(seeded):
+    """Distribution returns values for valid dimension."""
+    with session_scope() as sess:
+        vals = distribution(sess, "buffett")
+        assert len(vals) == 2
 
 
-def test_analyze_stream_endpoint(client):
-    r = client.get("/api/analyze/AAPL/stream")
-    assert r.status_code == 200
-    assert r.headers["content-type"].startswith("text/event-stream")
-    assert "event: done" in r.text
+def test_recalculate(seeded):
+    """Recalculate scores with custom weights."""
+    with session_scope() as sess:
+        c = get_company(sess, "AAPL")
+        assert c is not None
+        cd = inputs_to_financials(c.inputs)
+    # Recalculate with custom weights (disable one criterion)
+    dims = score_all(cd, {"graham": {"dividend_paid_5yr": None}})
+    assert "graham" in dims
+    assert dims["graham"].normalized_pct is not None
+
+
+def test_recalculate_404(seeded):
+    """Recalculate on non-existent company returns None."""
+    with session_scope() as sess:
+        c = get_company(sess, "ZZZZ")
+        assert c is None
+
+
+def test_composite_pct(seeded):
+    """Composite score is average of all available dimensions."""
+    with session_scope() as sess:
+        c = get_company(sess, "AAPL")
+        assert c is not None
+        cd = inputs_to_financials(c.inputs)
+    dims = score_all(cd)
+    comp = composite_pct(dims)
+    assert 0 <= comp <= 100

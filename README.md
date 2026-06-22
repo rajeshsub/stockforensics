@@ -3,8 +3,9 @@ title: StockForensics
 emoji: 📈
 colorFrom: blue
 colorTo: indigo
-sdk: docker
-app_port: 7860
+sdk: streamlit
+app_file: streamlit_app.py
+sdk_version: 1.41.1
 pinned: false
 ---
 
@@ -15,8 +16,9 @@ Munger, Earnings-Quality and (hybrid) Promoter-Integrity scores **deterministica
 in code**; an LLM supplies only qualitative narrative + structured promoter evidence
 that code then thresholds. **Never says buy/sell; educational research only.**
 
-Single Python (FastAPI) backend + a static React SPA it serves. See `plan.md` for the
-full design and the grilled decision log.
+Hosted as a Hugging Face Streamlit Space. The deterministic scoring pipeline (unchanged)
+is imported directly; no HTTP layer. See `plan.md` for the full design and the grilled
+decision log.
 
 ## Screenshots
 
@@ -51,22 +53,23 @@ computes a financial figure (rule #10). Promoter Integrity is finalised live on 
 ## Architecture
 
 ```
-Python FastAPI (one backend)              React SPA (served by FastAPI)
-  transform/  deterministic scoring         5 user-selectable themes
-  adapters/   SEC, yfinance, Gemini,        leaderboard (4 deterministic dims)
-              Pinecone, iShares (+fixtures) company detail + live thinking stream
-  agent/      RAG + grounded synthesis      weight editor (real-time renormalise)
-  pipeline/   batch (deterministic) +       radar + breakdowns
-              live analyze (streamed)
+Python deterministic modules (imported directly)
+  transform/  scoring engine: Graham, Buffett, Munger, Earnings Quality, Promoter
+  adapters/   SEC EDGAR, yfinance, Gemini, Pinecone, iShares (+offline fixtures)
+  agent/      RAG + grounded AI synthesis (Gemini + Google Search)
+  pipeline/   batch (deterministic) + live analysis (streamed)
   db/         SQLite (WAL)
-  core/       FastAPI + SSE + scheduler
+
+Streamlit UI (no HTTP layer)
+  leaderboard (st.dataframe): 4 deterministic dims ranked
+  company detail: 5-dimension scores, radar chart, narrative + AI
+  weight editor (st.slider): renormalise live, no backend
+  AI synthesis stream: SSE-style thinking visualised in Streamlit
 ```
 
-- **Batch** (scheduled/`/api/analysis/run`): computes the 4 deterministic dims for the
-  universe → leaderboard. No AI.
-- **On selection** (`/api/analyze/{ticker}/stream`): live market refresh + AI, streamed.
-- **Market poll** (`/api/market/{ticker}`): every 10s, NYSE-hours gated, 10-min cap,
-  valuation-only.
+- **Batch** (scheduled): computes the 4 deterministic dims for the universe → leaderboard.
+- **On selection** (triggered): live market refresh + AI synthesis, streamed line-by-line.
+- **Off-network** (weights): recalculate scores locally with custom weights, no server call.
 
 ## Run it
 
@@ -75,18 +78,13 @@ Python FastAPI (one backend)              React SPA (served by FastAPI)
 cd python && make bootstrap          # uv venv, deps, hooks, .env, DB, seed
 make test                            # offline gate: 80% coverage, all green
 
-# Dev: backend (:8000) + Vite frontend (:5173, proxies /api) together, hot-reload
-make dev                             # run from python/
-
-# ...or run the two halves separately:
-make run-dev                         # FastAPI on :8000
-cd ../frontend && npm install && npm run build   # static build served by FastAPI at :8000
-#   ...or `npm run dev` for the Vite dev server on :5173 (proxies /api to :8000)
+# Dev: run Streamlit on localhost:8501 (hot-reload on save)
+streamlit run streamlit_app.py
 ```
 
 Paste keys into `python/.env` when ready (`GEMINI_API_KEY`, `PINECONE_API_KEY`,
 `SEC_USER_AGENT`). Missing keys degrade gracefully: deterministic scores + live SEC
-data still work; LLM stages skip.
+data still work; LLM stages skip. On Hugging Face Spaces, add keys as Space secrets.
 
 ## The 5 scores
 

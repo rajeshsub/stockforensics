@@ -82,12 +82,3 @@ def fixture_adapters():
     from app.core.clients import build_adapters
 
     return build_adapters(force_fixtures=True)
-
-
-@pytest.fixture
-def client(seeded):
-    from fastapi.testclient import TestClient
-
-    from app.core.api import app
-
-    return TestClient(app)
