@@ -10,13 +10,13 @@ from app.db.migrate import migrate
 from app.pipeline.runner import run_batch
 
 
-def seed(path: str | None = None) -> int:
+def seed(path: str | None = None, force_fixtures: bool = True) -> int:
+    s = get_settings()
     migrate(path)
     with session_scope(path) as session:
         return run_batch(
-            build_adapters(get_settings(), force_fixtures=True),
+            build_adapters(s, force_fixtures=force_fixtures),
             session,
-            top_n=100,
         )
 
 
