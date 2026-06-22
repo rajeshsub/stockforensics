@@ -110,7 +110,7 @@ class GeminiLlmClient:
         self._embed_model = settings.gemini_embed_model
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        resp = self._embed_client.models.embed_content(model=self._embed_model, contents=texts)
+        resp = self._embed_client.models.embed_content(model=self._embed_model, contents=texts)  # type: ignore[arg-type]
         return [list(e.values or []) for e in (resp.embeddings or [])]
 
     def generate_stream(self, prompt: str) -> Iterator[str]:
