@@ -93,17 +93,18 @@ header[data-testid="stHeader"] { display: none; }
 }
 
 /* Breakdown table */
-.sf-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sf-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
 .sf-table th { color: #7b8798; font-size: 11px; font-weight: 600;
                text-transform: uppercase; padding: 8px 6px;
                border-bottom: 1px solid #e6ebf2; text-align: left; }
 .sf-table td { padding: 9px 6px; border-bottom: 1px solid #e6ebf2; color: #1e2733; }
 .sf-table td.r { text-align: right; }
 .sf-table th.r { text-align: right; }
-.sf-table td:nth-child(2), .sf-table th:nth-child(2) { white-space: nowrap; width: 1px; }
-.sf-table td:nth-child(3), .sf-table th:nth-child(3) { white-space: nowrap; width: 1px; }
-.sf-table td:nth-child(4), .sf-table th:nth-child(4) { white-space: nowrap; width: 1px; }
-.sf-table td:nth-child(5), .sf-table th:nth-child(5) { white-space: nowrap; width: 1px; }
+.sf-table td:first-child, .sf-table th:first-child { width: 40%; word-break: break-word; }
+.sf-table td:nth-child(2), .sf-table th:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sf-table td:nth-child(3), .sf-table th:nth-child(3) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sf-table td:nth-child(4), .sf-table th:nth-child(4) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sf-table td:nth-child(5), .sf-table th:nth-child(5) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sf-ok { color: #10b981; font-weight: 700; }
 .sf-no { color: #ef4444; font-weight: 700; }
 .sf-na { color: #7b8798; }
