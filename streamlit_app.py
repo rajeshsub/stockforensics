@@ -157,6 +157,43 @@ div[data-testid="stSelectbox"] > div > div {
     font-size: 14px !important;
     font-weight: 600 !important;
 }
+
+/* Gradient-border More info buttons */
+div[data-testid="stButton"] > button {
+    background: linear-gradient(#ffffff, #ffffff) padding-box,
+                linear-gradient(135deg, #2563eb, #10b981, #f59e0b, #ef4444) border-box !important;
+    border: 2px solid transparent !important;
+    border-radius: 8px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: #1e2733 !important;
+    padding: 4px 14px !important;
+    cursor: pointer;
+    width: 100%;
+}
+div[data-testid="stButton"] > button:hover { opacity: 0.82; }
+
+/* Live thinking indicator */
+@keyframes sf-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.3; transform: scale(0.75); }
+}
+.sf-live-dot {
+    display: inline-block;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #2563eb;
+    margin-right: 7px; vertical-align: middle;
+    animation: sf-pulse 1.5s ease-in-out infinite;
+}
+
+/* Cached AI badge */
+.sf-cached-badge {
+    background: #f0fdf4; color: #16a34a;
+    border: 1px solid #bbf7d0;
+    font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 999px;
+    display: inline-block; margin-left: 8px; vertical-align: middle;
+}
 </style>
 """
 
@@ -193,7 +230,19 @@ def _is_stale(detail: dict[str, Any]) -> bool:
         return True
     if run_date.tzinfo is None:
         run_date = run_date.replace(tzinfo=UTC)
-    return (datetime.now(UTC) - run_date) > timedelta(hours=3)
+    return (datetime.now(UTC) - run_date) > timedelta(hours=4)
+
+
+def _ago_text(run_date: Any) -> str:
+    if run_date is None:
+        return ""
+    if run_date.tzinfo is None:
+        run_date = run_date.replace(tzinfo=UTC)
+    total_minutes = int((datetime.now(UTC) - run_date).total_seconds() // 60)
+    if total_minutes < 60:
+        return f"{total_minutes}m ago"
+    h, m = divmod(total_minutes, 60)
+    return f"{h}h ago" if m == 0 else f"{h}h {m}m ago"
 
 
 def _parse_sse(stream: Any) -> Any:
@@ -362,8 +411,8 @@ def _render_score_cards(detail: dict[str, Any]) -> None:
         ("earnings_quality", "Earnings Quality"),
         ("promoter_integrity", "Promoter Integrity"),
     ]
-    cards = ""
-    for key, label in dim_order:
+
+    def _card_html(key: str, label: str) -> str:
         d = scores.get(key, {})
         pct = d.get("normalized_pct", 0)
         score = d.get("score", 0)
@@ -372,33 +421,54 @@ def _render_score_cards(detail: dict[str, Any]) -> None:
         color = _score_color(pct)
         lbl = _score_label(pct)
         if key == "promoter_integrity" and not detail["promoter_live"]:
-            cards += (
+            return (
                 f'<div class="sf-card">'
                 f'<div class="sf-card-label">{label}</div>'
-                f'<div class="sf-card-score" style="color:#7b8798;font-size:18px;margin-top:12px">Run AI to score</div>'
-                f'<div class="sf-bar"><i style="width:0%"></i></div>'
-                f'<div class="sf-card-meta"><span>live AI only</span></div>'
+                f'<div class="sf-card-score" style="color:#7b8798;font-size:15px;font-weight:600;margin-top:10px;line-height:1.4">'
+                f"Score pending AI run</div>"
+                f'<div class="sf-bar"><i style="width:0%;background:#e6ebf2"></i></div>'
+                f'<div class="sf-card-meta" style="font-size:11px;color:#9ca8b6">'
+                f"<span>Evaluates CEO track record, SEC enforcement history &amp; governance via live web search</span>"
+                f"</div>"
                 f"</div>"
             )
-        else:
-            cards += (
-                f'<div class="sf-card">'
-                f'<div class="sf-card-label">{label}</div>'
-                f'<div class="sf-card-score">{score:.1f}<span class="sf-card-den">/{max_s:.0f}</span></div>'
-                f'<div class="sf-bar"><i style="width:{pct:.0f}%;background:{color}"></i></div>'
-                f'<div class="sf-card-meta"><span>{pct:.0f}% &middot; {lbl}</span><span>conf {conf:.2f}</span></div>'
-                f"</div>"
-            )
+        return (
+            f'<div class="sf-card">'
+            f'<div class="sf-card-label">{label}</div>'
+            f'<div class="sf-card-score">{score:.1f}<span class="sf-card-den">/{max_s:.0f}</span></div>'
+            f'<div class="sf-bar"><i style="width:{pct:.0f}%;background:{color}"></i></div>'
+            f'<div class="sf-card-meta"><span>{pct:.0f}% &middot; {lbl}</span><span>conf {conf:.2f}</span></div>'
+            f"</div>"
+        )
+
+    def _render_dim_col(col: Any, key: str, label: str) -> None:
+        with col:
+            st.markdown(_card_html(key, label), unsafe_allow_html=True)
+            if scores.get(key, {}).get("breakdown"):
+                if st.button("More info", key=f"mi_{key}", use_container_width=True):
+                    _breakdown_dialog(detail, key, label)
+
+    cols1 = st.columns(3)
+    for i, (key, label) in enumerate(dim_order[:3]):
+        _render_dim_col(cols1[i], key, label)
+
+    cols2 = st.columns(3)
+    for i, (key, label) in enumerate(dim_order[3:]):
+        _render_dim_col(cols2[i], key, label)
+
     composite = detail["composite_pct_full"]
-    cards += (
-        f'<div class="sf-card sf-card-composite">'
-        f'<div class="sf-card-label" style="color:#dbeafe">Composite (5-dim)</div>'
-        f'<div class="sf-card-score" style="color:#fff;font-size:42px">{composite:.0f}'
-        f'<span class="sf-card-den" style="color:#dbeafe">%</span></div>'
-        f'<div class="sf-card-meta" style="color:#dbeafe;justify-content:center">avg of all dimensions</div>'
-        f"</div>"
-    )
-    st.markdown(f'<div class="sf-grid">{cards}</div>', unsafe_allow_html=True)
+    with cols2[2]:
+        st.markdown(
+            f'<div class="sf-card sf-card-composite">'
+            f'<div class="sf-card-label" style="color:#dbeafe">AI Overall Score</div>'
+            f'<div class="sf-card-score" style="color:#fff;font-size:42px">{composite:.0f}'
+            f'<span class="sf-card-den" style="color:#dbeafe">%</span></div>'
+            f'<div class="sf-card-meta" style="color:#dbeafe;justify-content:center">AI-synthesised across all 5 dimensions</div>'
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        if st.button("More info", key="mi_overall", use_container_width=True):
+            _composite_score_dialog(detail)
 
 
 def _render_radar(detail: dict[str, Any]) -> None:
@@ -485,14 +555,64 @@ def _render_breakdown(detail: dict[str, Any], dim_key: str) -> None:
     )
 
 
-def _run_analysis_stream(ticker: str) -> None:
+@st.dialog("Breakdown")
+def _breakdown_dialog(detail: dict[str, Any], dim_key: str, dim_label: str) -> None:
+    st.markdown(f"**{dim_label}**")
+    _render_breakdown(detail, dim_key)
+
+
+@st.dialog("AI Composite Analysis", width="large")
+def _composite_dialog(text: str) -> None:
+    st.markdown(text)
+
+
+@st.dialog("AI Overall Score - How It Was Computed", width="large")
+def _composite_score_dialog(detail: dict[str, Any]) -> None:
+    composite = detail["composite_pct_full"]
+    dim_order = [
+        ("graham", "Graham"),
+        ("buffett", "Buffett Quality"),
+        ("munger", "Munger Composite"),
+        ("earnings_quality", "Earnings Quality"),
+        ("promoter_integrity", "Promoter Integrity"),
+    ]
+    rows = ""
+    for key, label in dim_order:
+        d = detail["scores"].get(key, {})
+        pct = d.get("normalized_pct", 0)
+        score = d.get("score", 0)
+        max_s = d.get("max_score", 0) or d.get("nominal_max", 10)
+        color = _score_color(pct)
+        lbl = _score_label(pct)
+        rows += (
+            f"<tr><td>{label}</td>"
+            f"<td class='r'>{score:.1f}/{max_s:.0f}</td>"
+            f"<td class='r' style='color:{color};font-weight:700'>{pct:.0f}%</td>"
+            f"<td>{lbl}</td></tr>"
+        )
+    st.markdown(
+        f"**Overall AI score: {composite:.0f}%** - simple average of all scored dimensions",
+        unsafe_allow_html=False,
+    )
+    st.markdown(
+        f'<table class="sf-table"><tr>'
+        f"<th>Dimension</th><th class='r'>Raw</th><th class='r'>Score</th><th>Rating</th>"
+        f"</tr>{rows}</table>",
+        unsafe_allow_html=True,
+    )
+    narrative = detail.get("composite_narrative", "")
+    if narrative:
+        st.markdown("---")
+        st.markdown("**AI reasoning behind the overall verdict:**")
+        st.markdown(narrative)
+
+
+def _run_analysis_stream(ticker: str, title_ph: Any = None) -> None:
     """Stream AI analysis, updating a scrollable panel as events arrive."""
     from app.pipeline.analyze import analyze_stream
 
-    st.markdown(
-        '<div class="sf-panel-title" style="margin-bottom:10px">Live Analysis Stream</div>',
-        unsafe_allow_html=True,
-    )
+    st.session_state["_streaming_ticker"] = ticker.upper()
+
     stream_box = st.container(height=280)
     placeholder = stream_box.empty()
     stages_html = ""
@@ -527,29 +647,64 @@ def _run_analysis_stream(ticker: str) -> None:
                 f'<div class="sf-stage-text" style="color:#ef4444">{data.get("message","error")}</div></div>'
             )
 
+    if title_ph is not None:
+        title_ph.markdown(
+            '<div style="margin-bottom:10px">'
+            '<span style="color:#10b981;font-size:14px;font-weight:700">&#10003;&nbsp;'
+            "AI Agent Analysis &amp; Thinking - 100% Complete</span>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
     if citations:
         st.session_state["citations"] = citations
     st.rerun()
 
 
-def _render_narratives(detail: dict[str, Any]) -> None:
-    if detail["narrative"]:
+def _render_composite_analysis(detail: dict[str, Any], streaming: bool = False) -> None:
+    text = detail.get("composite_narrative", "")
+    title_prefix = '<span class="sf-live-dot"></span>' if streaming else ""
+    st.markdown(
+        f'<div style="margin-bottom:8px">{title_prefix}'
+        f'<span class="sf-panel-title">AI Composite Analysis</span></div>',
+        unsafe_allow_html=True,
+    )
+    if text:
+        PREVIEW = 300
+        preview = text[:PREVIEW] + ("…" if len(text) > PREVIEW else "")
         st.markdown(
-            f'<div class="sf-panel">'
-            f'<div class="sf-panel-title">Qualitative Narrative</div>'
-            f'<div style="font-size:14px;line-height:1.75;color:#1e2733">{detail["narrative"]}</div>'
-            f"</div>",
+            f'<div style="font-size:13px;line-height:1.7;color:#1e2733">{preview}</div>',
             unsafe_allow_html=True,
         )
-    if detail["composite_narrative"]:
+        if len(text) > PREVIEW:
+            if st.button("More info", key="mi_composite", use_container_width=True):
+                _composite_dialog(text)
+    elif streaming:
         st.markdown(
-            f'<div class="sf-panel">'
-            f'<div class="sf-panel-title">AI Composite Analysis</div>'
-            f'<div style="font-size:14px;line-height:1.75;color:#1e2733">{detail["composite_narrative"]}</div>'
-            f"</div>",
+            '<div style="font-size:13px;color:#7b8798;margin-top:8px;font-style:italic">'
+            "Generating narrative&hellip; will appear here once the AI completes its analysis."
+            "</div>",
             unsafe_allow_html=True,
         )
+    else:
+        st.markdown(
+            '<div style="font-size:13px;color:#7b8798;margin-top:8px">'
+            "AI analysis has not been run yet for this stock.</div>",
+            unsafe_allow_html=True,
+        )
+
+
+def _render_qualitative_narrative(detail: dict[str, Any]) -> None:
+    narrative = detail.get("narrative", "")
     cites = detail.get("citations") or st.session_state.get("citations", [])
+    if not narrative:
+        return
+    st.markdown(
+        f'<div class="sf-panel">'
+        f'<div class="sf-panel-title">Qualitative Narrative</div>'
+        f'<div style="font-size:14px;line-height:1.75;color:#1e2733">{narrative}</div>'
+        f"</div>",
+        unsafe_allow_html=True,
+    )
     if cites:
         links = " &nbsp;&middot;&nbsp; ".join(
             f'<a href="{c.get("url","#")}" target="_blank" style="color:#2563eb;font-size:12px">'
@@ -568,17 +723,12 @@ def _render_thinking_replay(detail: dict[str, Any]) -> None:
     reasoning = detail.get("reasoning") or ""
     run_date = detail.get("run_date")
 
-    label = "AI Analysis"
-    if run_date is not None:
-        ts = (
-            run_date.strftime("%Y-%m-%d %H:%M UTC")
-            if run_date.tzinfo
-            else run_date.strftime("%Y-%m-%d %H:%M")
-        )
-        label += f" &middot; cached {ts}"
-
+    ago = _ago_text(run_date)
+    badge = f'<span class="sf-cached-badge">cached {ago}</span>' if ago else ""
     st.markdown(
-        f'<div class="sf-panel-title" style="margin-bottom:10px">{label}</div>',
+        f'<div style="margin-bottom:10px">'
+        f'<span class="sf-panel-title">AI Agent Analysis &amp; Thinking</span>{badge}'
+        f"</div>",
         unsafe_allow_html=True,
     )
     stream_box = st.container(height=280)
@@ -734,6 +884,9 @@ def main() -> None:
     ticker_map = {c["display"]: c["ticker"] for c in companies}
     displays = list(ticker_map.keys())
 
+    _streaming_ticker = st.session_state.get("_streaming_ticker")
+    _is_streaming = bool(_streaming_ticker)
+
     st.markdown(
         '<p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#1e2733">'
         '<span class="sf-step sf-step-2">STEP 2</span> Pick a stock to analyze:</p>',
@@ -746,7 +899,20 @@ def main() -> None:
         placeholder="Select a stock to analyze...",
         label_visibility="collapsed",
         key="ticker_select",
+        disabled=_is_streaming,
+        help="Cannot switch stocks while AI analysis is running."
+        if _is_streaming
+        else None,
     )
+    if _is_streaming:
+        _streaming_name = next(
+            (c["name"] for c in companies if c["ticker"] == _streaming_ticker),
+            _streaming_ticker,
+        )
+        st.info(
+            f"AI analysis is running for **{_streaming_name}** - stock selection is locked until it completes.",
+            icon="⏳",
+        )
 
     if selected_display is None:
         st.markdown(
@@ -782,11 +948,14 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    # Score cards (3-col grid)
+    # Score cards (3-col grid, each with More info button)
     _render_score_cards(detail)
 
-    # Radar + dimension breakdown side by side
-    col_radar, col_table = st.columns([1, 1.35])
+    # Weight editor (collapsed by default) - above radar/composite row
+    _render_weight_editor(detail)
+
+    # Radar + AI Composite Analysis side by side (50/50)
+    col_radar, col_composite = st.columns([1, 1])
     with col_radar:
         with st.container(border=True):
             st.markdown(
@@ -794,52 +963,35 @@ def main() -> None:
                 unsafe_allow_html=True,
             )
             _render_radar(detail)
-    with col_table:
-        dim_labels = {
-            "graham": "Graham",
-            "buffett": "Buffett",
-            "munger": "Munger",
-            "earnings_quality": "Earnings",
-            "promoter_integrity": "Promoter",
-        }
-        chosen_dim = st.radio(
-            "View breakdown for:",
-            list(dim_labels.keys()),
-            format_func=lambda k: dim_labels[k],
-            horizontal=True,
-            key="breakdown_dim",
-        )
-        _render_breakdown(detail, chosen_dim)
-
-    # AI analysis: auto-run if no cached result; show cache if fresh; re-run only if stale
     has_result = bool(detail["narrative"] or detail["promoter_live"])
-    stale = _is_stale(detail)
+    with col_composite:
+        with st.container(border=True):
+            _render_composite_analysis(detail, streaming=not has_result)
+
+    # Qualitative narrative (full width, only when available)
+    _render_qualitative_narrative(detail)
+
+    # Clear streaming lock once the result is available
+    if _is_streaming and has_result and _streaming_ticker == ticker:
+        del st.session_state["_streaming_ticker"]
+        st.rerun()
+
+    # AI analysis panel - always in the same st.empty() slot so it never ghosts
+    _analysis_slot = st.empty()
     if has_result:
-        _render_narratives(detail)
-        with st.container(border=True):
+        with _analysis_slot.container(border=True):
             _render_thinking_replay(detail)
-        if stale:
-            if st.button(
-                "Re-run AI Analysis",
-                type="secondary",
-                help="Data is older than 3 hours",
-            ):
-                _run_analysis_stream(ticker)
     else:
-        with st.container(border=True):
-            st.markdown(
-                '<div class="sf-panel-title" style="margin-bottom:4px">Live Analysis Stream</div>'
-                '<div style="font-size:12px;color:#7b8798;margin-bottom:10px">'
-                "AI thinking steps stream here in real time via SSE &mdash; every reasoning stage, "
-                "evidence finding and web citation appears as the model works. "
-                "Results are saved and replayed on future views."
+        with _analysis_slot.container(border=True):
+            _title_ph = st.empty()
+            _title_ph.markdown(
+                '<div style="margin-bottom:10px">'
+                '<span class="sf-live-dot"></span>'
+                '<span class="sf-panel-title">AI Agent Analysis &amp; Thinking</span>'
                 "</div>",
                 unsafe_allow_html=True,
             )
-            _run_analysis_stream(ticker)
-
-    # Weight editor (collapsible)
-    _render_weight_editor(detail)
+            _run_analysis_stream(ticker, title_ph=_title_ph)
 
     # How to use (always visible at bottom)
     _render_how_to_use()

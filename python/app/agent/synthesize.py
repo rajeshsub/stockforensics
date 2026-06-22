@@ -40,9 +40,10 @@ def retrieve_context(adapters: Adapters, ticker: str, cik: str) -> str:
     return "\n".join(str(m.metadata.get("text", "")) for m in matches)
 
 
-def build_prompt(ticker: str, context: str) -> str:
+def build_prompt(ticker: str, context: str, name: str | None = None) -> str:
+    display = f"{name} ({ticker})" if name else ticker
     return (
-        f"You are an equity research assistant analysing {ticker}. Use the SEC filing "
+        f"You are an equity research assistant analysing {display}. Use the SEC filing "
         f"excerpts below AND a live web search (google_search) for recent news. The "
         '"narrative" is a QUALITATIVE BRIEF of what the filings and the live web turned '
         "up about the company: open with a 1-2 sentence executive summary paragraph (no "
