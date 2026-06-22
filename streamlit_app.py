@@ -1031,15 +1031,26 @@ def main() -> None:
     # Sources (citations) pushed to bottom
     cites = detail.get("citations") or st.session_state.get("citations", [])
     if cites:
-        links = " &nbsp;&middot;&nbsp; ".join(
-            f'<a href="{c.get("url","#")}" target="_blank" style="color:#2563eb;font-size:12px">'
-            f'{c.get("title","Source")}</a>'
-            for c in cites
-        )
-        st.markdown(
-            f'<div style="margin-bottom:18px;color:#7b8798;font-size:12px">Sources: {links}</div>',
-            unsafe_allow_html=True,
-        )
+        parts = []
+        for c in cites:
+            url = c.get("url", "")
+            title = c.get("title", "") or c.get("domain", "") or "Source"
+            if url and "vertexaisearch.cloud.google.com" not in url:
+                parts.append(
+                    f'<a href="{url}" target="_blank" style="color:#2563eb;font-size:12px">{title}</a>'
+                )
+            else:
+                label = title if title != "Source" else c.get("domain", "Source")
+                parts.append(
+                    f'<span style="font-size:12px;color:#1e2733">{label}</span>'
+                )
+        if parts:
+            st.markdown(
+                '<div style="margin-bottom:18px;color:#7b8798;font-size:12px">Sources: '
+                + " &nbsp;&middot;&nbsp; ".join(parts)
+                + "</div>",
+                unsafe_allow_html=True,
+            )
 
     # How to use (always visible at bottom)
     _render_how_to_use()
