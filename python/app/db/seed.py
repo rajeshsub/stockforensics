@@ -1,8 +1,10 @@
 """DB seeding utilities.
 
 seed()          - fixture-only, offline, used by tests and make bootstrap.
-seed_extended() - top-10 S&P 500 via hardcoded list + fixture scoring; used by
-                  the Streamlit app on first boot. No network calls, no file deps.
+seed_extended() - top-10 S&P 500 with real SEC XBRL + YFinance market data.
+                  No API key required. SEC companyfacts data is valid for ~1 year
+                  (annual 10-K cadence); staleness is checked in _boot_db before
+                  calling this.
 """
 
 from __future__ import annotations
@@ -13,9 +15,24 @@ from app.db.engine import session_scope
 from app.db.migrate import migrate
 from app.pipeline.runner import run_batch
 
+# Top-10 S&P 500 by market cap (snapshot order used as tiebreak when market data
+# is unavailable; re-ranked by live YFinance market cap inside run_batch).
+_TOP10 = [
+    ("AAPL", "Apple Inc", "Information Technology"),
+    ("MSFT", "Microsoft Corp", "Information Technology"),
+    ("NVDA", "NVIDIA Corp", "Information Technology"),
+    ("AMZN", "Amazon.com Inc", "Consumer Discretionary"),
+    ("GOOGL", "Alphabet Inc", "Communication Services"),
+    ("META", "Meta Platforms Inc", "Communication Services"),
+    ("TSLA", "Tesla Inc", "Consumer Discretionary"),
+    ("BRK.B", "Berkshire Hathaway", "Financials"),
+    ("AVGO", "Broadcom Inc", "Information Technology"),
+    ("JPM", "JPMorgan Chase & Co", "Financials"),
+]
+
 
 def seed(path: str | None = None) -> int:
-    """Fixture-only seed: AAPL + MSFT with full deterministic scores."""
+    """Fixture-only seed: AAPL + MSFT with full deterministic scores. Used by tests."""
     s = get_settings()
     migrate(path)
     with session_scope(path) as session:
@@ -23,40 +40,24 @@ def seed(path: str | None = None) -> int:
 
 
 def seed_extended(path: str | None = None) -> int:
-    """Production seed: top-10 S&P 500 hardcoded + fixture scoring data.
-    All 10 appear in the combo box; AAPL/MSFT get full scores, others minimal."""
+    """Production seed: fetch real SEC XBRL + YFinance data for top-10 S&P 500.
+    SEC companyfacts are cached for ~1 year (annual 10-K filing cadence).
+    Scores for Graham, Buffett, Munger, and Earnings Quality are computed here
+    so they are ready to display the moment a user selects a stock, before the
+    LLM promoter analysis has run."""
     from app.adapters.protocols import Constituent
-
-    _TOP10 = [
-        Constituent("AAPL", "Apple Inc", "Information Technology"),
-        Constituent("MSFT", "Microsoft Corp", "Information Technology"),
-        Constituent("NVDA", "NVIDIA Corp", "Information Technology"),
-        Constituent("AMZN", "Amazon.com Inc", "Consumer Discretionary"),
-        Constituent("GOOGL", "Alphabet Inc", "Communication Services"),
-        Constituent("META", "Meta Platforms Inc", "Communication Services"),
-        Constituent("TSLA", "Tesla Inc", "Consumer Discretionary"),
-        Constituent("BRK.B", "Berkshire Hathaway", "Financials"),
-        Constituent("AVGO", "Broadcom Inc", "Information Technology"),
-        Constituent("JPM", "JPMorgan Chase & Co", "Financials"),
-    ]
 
     class _Top10UniverseClient:
         def fetch_constituents(self) -> list[Constituent]:
-            return list(_TOP10)
+            return [Constituent(ticker=t, name=n, sector=s) for t, n, s in _TOP10]
 
     s = get_settings()
     migrate(path)
-    a = build_adapters(s, force_fixtures=True)
+    # Real SEC + market adapters; universe hardcoded so startup never depends on
+    # iShares network fetch. resolve_cik is now fault-tolerant (returns None on
+    # EDGAR unavailability) so a single company failure won't abort the batch.
+    a = build_adapters(s, force_fixtures=False)
     a.universe = _Top10UniverseClient()
-    # Use live market data so P/E, P/B, and market cap are real; Graham and
-    # Munger scores become non-zero. SEC/vector stay as fixtures (no network
-    # dependency at startup).
-    try:
-        from app.adapters.market_client import YFinanceMarketClient
-
-        a.market = YFinanceMarketClient()
-    except Exception:
-        pass  # keeps fixture market data on failure
     with session_scope(path) as session:
         return run_batch(a, session)
 

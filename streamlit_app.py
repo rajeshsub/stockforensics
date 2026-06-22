@@ -228,7 +228,13 @@ def _inject_hf_secrets() -> None:
 
 @st.cache_resource
 def _boot_db() -> None:
-    """Migrate + seed the DB exactly once per Streamlit server process."""
+    """Migrate + seed the DB exactly once per Streamlit server process.
+
+    Skips re-seeding if >= 10 companies exist and their run_date is < 340 days
+    old (annual 10-K cadence: most S&P 500 companies file by March for the prior
+    Dec-31 fiscal year; 340 days gives a small buffer before re-fetching)."""
+    from datetime import UTC, datetime
+
     from sqlalchemy import func, select
 
     from app.core.config import get_settings
@@ -243,12 +249,23 @@ def _boot_db() -> None:
         migrate()
     except Exception:
         pass
+
     with session_scope() as sess:
         count = sess.execute(select(func.count(CompanyScore.id))).scalar()
-    if not count:
-        from app.db.seed import seed_extended
+        oldest_run = None
+        if count:
+            oldest_run = sess.execute(select(func.min(CompanyScore.run_date))).scalar()
 
-        seed_extended()
+    if count and count >= 10 and oldest_run is not None:
+        if oldest_run.tzinfo is None:
+            oldest_run = oldest_run.replace(tzinfo=UTC)
+        age_days = (datetime.now(UTC) - oldest_run).days
+        if age_days < 340:
+            return  # SEC data is fresh; skip re-seed
+
+    from app.db.seed import seed_extended
+
+    seed_extended()
 
 
 @st.cache_resource
@@ -648,7 +665,8 @@ def main() -> None:
     )
     st.markdown(_CSS, unsafe_allow_html=True)
     _inject_hf_secrets()
-    _boot_db()
+    with st.spinner("Loading SEC fundamentals for top-10 S&P 500 (first load only)…"):
+        _boot_db()
 
     # --- Top bar: logo + disclaimer + STEP 1 API key ---
     col_logo, col_key = st.columns([3, 2])

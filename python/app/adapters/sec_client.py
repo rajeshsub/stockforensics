@@ -28,10 +28,14 @@ class HttpxSecClient:
 
     def resolve_cik(self, ticker: str) -> str | None:
         if self._cik_map is None:
-            data = self._get(TICKERS_URL).json()
-            self._cik_map = {
-                str(row["ticker"]).upper(): f"{int(row['cik_str']):010d}" for row in data.values()
-            }
+            try:
+                data = self._get(TICKERS_URL).json()
+                self._cik_map = {
+                    str(row["ticker"]).upper(): f"{int(row['cik_str']):010d}"
+                    for row in data.values()
+                }
+            except Exception:
+                self._cik_map = {}  # empty on failure so subsequent calls skip the network
         t = ticker.upper()
         return self._cik_map.get(t) or self._cik_map.get(t.replace(".", "-"))
 
