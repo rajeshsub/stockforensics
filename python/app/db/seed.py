@@ -48,6 +48,15 @@ def seed_extended(path: str | None = None) -> int:
     migrate(path)
     a = build_adapters(s, force_fixtures=True)
     a.universe = _Top10UniverseClient()
+    # Use live market data so P/E, P/B, and market cap are real; Graham and
+    # Munger scores become non-zero. SEC/vector stay as fixtures (no network
+    # dependency at startup).
+    try:
+        from app.adapters.market_client import YFinanceMarketClient
+
+        a.market = YFinanceMarketClient()
+    except Exception:
+        pass  # keeps fixture market data on failure
     with session_scope(path) as session:
         return run_batch(a, session)
 

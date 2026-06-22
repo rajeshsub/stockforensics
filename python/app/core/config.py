@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # Gemini
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-2.5-flash"
     gemini_embed_model: str = "gemini-embedding-001"
     gemini_rpm: int = 10
 
