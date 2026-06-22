@@ -246,9 +246,9 @@ def _boot_db() -> None:
     with session_scope() as sess:
         count = sess.execute(select(func.count(CompanyScore.id))).scalar()
     if not count:
-        from app.db.seed import seed
+        from app.db.seed import seed_extended
 
-        seed()
+        seed_extended()
 
 
 @st.cache_resource
