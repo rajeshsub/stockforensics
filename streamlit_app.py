@@ -100,8 +100,10 @@ header[data-testid="stHeader"] { display: none; }
 .sf-table td { padding: 9px 6px; border-bottom: 1px solid #e6ebf2; color: #1e2733; }
 .sf-table td.r { text-align: right; }
 .sf-table th.r { text-align: right; }
-.sf-table td:first-child, .sf-table th:first-child { white-space: nowrap; }
-.sf-table td:nth-child(2), .sf-table th:nth-child(2) { white-space: nowrap; }
+.sf-table td:nth-child(2), .sf-table th:nth-child(2) { white-space: nowrap; width: 1px; }
+.sf-table td:nth-child(3), .sf-table th:nth-child(3) { white-space: nowrap; width: 1px; }
+.sf-table td:nth-child(4), .sf-table th:nth-child(4) { white-space: nowrap; width: 1px; }
+.sf-table td:nth-child(5), .sf-table th:nth-child(5) { white-space: nowrap; width: 1px; }
 .sf-ok { color: #10b981; font-weight: 700; }
 .sf-no { color: #ef4444; font-weight: 700; }
 .sf-na { color: #7b8798; }
@@ -622,6 +624,11 @@ def _run_analysis_stream(ticker: str, title_ph: Any = None) -> None:
 
     st.session_state["_streaming_ticker"] = ticker.upper()
 
+    # 9 named stages: resolving, filings, chunking, embedding, retrieving,
+    # reasoning, evidence, scoring, scored
+    _TOTAL_STAGES = 9
+    stages_seen = 0
+
     stream_box = st.container(height=280, key="sf_stream_box")
     placeholder = stream_box.empty()
     stages_html = ""
@@ -631,10 +638,26 @@ def _run_analysis_stream(ticker: str, title_ph: Any = None) -> None:
         stages_html += extra
         placeholder.markdown(stages_html, unsafe_allow_html=True)
 
+    def _update_title(pct: int) -> None:
+        if title_ph is None:
+            return
+        title_ph.markdown(
+            f'<div style="margin-bottom:10px">'
+            f'<span class="sf-live-dot"></span>'
+            f'<span class="sf-panel-title">AI Agent Analysis &amp; Thinking</span>'
+            f'<span style="color:#7b8798;font-size:12px;margin-left:10px">'
+            f"Please wait &mdash; {pct}% complete&hellip;</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
     citations: list[dict[str, Any]] = []
 
     for event_type, data in _parse_sse(analyze_stream(_get_adapters(), ticker)):
         if event_type == "stage":
+            stages_seen += 1
+            pct = min(round(stages_seen / _TOTAL_STAGES * 100), 99)
+            _update_title(pct)
             _update(
                 f'<div class="sf-stage">'
                 f'<div class="sf-stage-icon done">&#10003;</div>'
@@ -660,7 +683,7 @@ def _run_analysis_stream(ticker: str, title_ph: Any = None) -> None:
         title_ph.markdown(
             '<div style="margin-bottom:10px">'
             '<span style="color:#10b981;font-size:14px;font-weight:700">&#10003;&nbsp;'
-            "AI Agent Analysis &amp; Thinking - 100% Complete</span>"
+            "AI Agent Analysis &amp; Thinking &mdash; Complete</span>"
             "</div>",
             unsafe_allow_html=True,
         )
@@ -705,15 +728,16 @@ def _render_qualitative_narrative(detail: dict[str, Any]) -> None:
     narrative = detail.get("narrative", "")
     if not narrative:
         return
-    st.markdown(
-        f'<div class="sf-panel">'
-        f'<div class="sf-panel-title">Qualitative Narrative</div>'
-        f'<div style="font-size:14px;line-height:1.75;color:#1e2733;'
-        f'height:280px;overflow-y:scroll;overflow-x:hidden;padding-right:4px">'
-        f"{narrative}</div>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
+    with st.container(border=True):
+        st.markdown(
+            '<div class="sf-panel-title">Qualitative Narrative</div>',
+            unsafe_allow_html=True,
+        )
+        narrative_box = st.container(height=280)
+        narrative_box.markdown(
+            f'<div style="font-size:14px;line-height:1.75;color:#1e2733">{narrative}</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def _render_thinking_replay(detail: dict[str, Any]) -> None:
@@ -997,6 +1021,8 @@ def main() -> None:
                 '<div style="margin-bottom:10px">'
                 '<span class="sf-live-dot"></span>'
                 '<span class="sf-panel-title">AI Agent Analysis &amp; Thinking</span>'
+                '<span style="color:#7b8798;font-size:12px;margin-left:10px">'
+                "Please wait &mdash; starting analysis&hellip;</span>"
                 "</div>",
                 unsafe_allow_html=True,
             )
