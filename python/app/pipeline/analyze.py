@@ -179,7 +179,14 @@ def analyze_stream(adapters: Adapters, ticker: str) -> Iterator[str]:
         f"Querying {settings.gemini_model} with live Google Search grounding for "
         "governance + financial evidence…",
     )
-    prompt = build_prompt(tk, context)
+    _company_name: str | None = None
+    with session_scope() as _ns:
+        _nr = _ns.execute(
+            select(CompanyScore).where(CompanyScore.ticker == tk)
+        ).scalar_one_or_none()
+        if _nr:
+            _company_name = _nr.name
+    prompt = build_prompt(tk, context, name=_company_name)
     # Stream the model's own thought summaries (how it weighs the evidence) as they arrive.
     reasoning_parts: list[str] = []
     raw: dict[str, Any] = {}

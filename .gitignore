@@ -5,3 +5,10 @@ plan.md
 # secrets
 python/.env
 frontend/.env
+
+# generated artifacts
+.coverage
+htmlcov/
+*.pyc
+__pycache__/
+.pytest_cache/
