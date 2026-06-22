@@ -100,6 +100,8 @@ header[data-testid="stHeader"] { display: none; }
 .sf-table td { padding: 9px 6px; border-bottom: 1px solid #e6ebf2; color: #1e2733; }
 .sf-table td.r { text-align: right; }
 .sf-table th.r { text-align: right; }
+.sf-table td:first-child, .sf-table th:first-child { white-space: nowrap; }
+.sf-table td:nth-child(2), .sf-table th:nth-child(2) { white-space: nowrap; }
 .sf-ok { color: #10b981; font-weight: 700; }
 .sf-no { color: #ef4444; font-weight: 700; }
 .sf-na { color: #7b8798; }
@@ -432,7 +434,7 @@ def _render_score_cards(detail: dict[str, Any]) -> None:
                 f'<div class="sf-card">'
                 f'<div class="sf-card-label">{label}</div>'
                 f'<div class="sf-card-score" style="color:#7b8798;font-size:15px;font-weight:600;margin-top:10px;line-height:1.4">'
-                f"Score pending AI run</div>"
+                f'<span class="sf-live-dot"></span>Score pending AI run</div>'
                 f'<div class="sf-bar"><i style="width:0%;background:#e6ebf2"></i></div>'
                 f'<div class="sf-card-meta" style="font-size:11px;color:#9ca8b6">'
                 f"<span>Evaluates CEO track record, SEC enforcement history &amp; governance via live web search</span>"
@@ -562,7 +564,7 @@ def _render_breakdown(detail: dict[str, Any], dim_key: str) -> None:
     )
 
 
-@st.dialog("Breakdown")
+@st.dialog("Breakdown", width="large")
 def _breakdown_dialog(detail: dict[str, Any], dim_key: str, dim_label: str) -> None:
     st.markdown(f"**{dim_label}**")
     _render_breakdown(detail, dim_key)
@@ -707,7 +709,7 @@ def _render_qualitative_narrative(detail: dict[str, Any]) -> None:
         f'<div class="sf-panel">'
         f'<div class="sf-panel-title">Qualitative Narrative</div>'
         f'<div style="font-size:14px;line-height:1.75;color:#1e2733;'
-        f'height:200px;overflow-y:scroll;overflow-x:hidden;padding-right:4px">'
+        f'height:280px;overflow-y:scroll;overflow-x:hidden;padding-right:4px">'
         f"{narrative}</div>"
         f"</div>",
         unsafe_allow_html=True,
@@ -812,8 +814,25 @@ def main() -> None:
     )
     st.markdown(_CSS, unsafe_allow_html=True)
     _inject_hf_secrets()
-    with st.spinner("Loading SEC fundamentals for top-10 S&P 500 (first load only)…"):
+    with st.status(
+        "First-time setup: fetching SEC filings and computing scores — 30–60 seconds, one time only…",
+        expanded=True,
+    ) as _boot_status:
+        st.markdown(
+            "**What StockForensics is doing right now:**\n\n"
+            "- Downloading real 10-K annual filings from SEC EDGAR for the top 10 S&P 500 companies\n"
+            "- Fetching live market data (price, market cap) from Yahoo Finance\n"
+            "- Computing Graham, Buffett, Munger and Earnings Quality scores from the raw financials\n"
+            "- Saving everything to a local database so all future loads are instant\n\n"
+            "**This screen only appears once.** After setup completes you will never see it again — "
+            "even across browser refreshes and server restarts."
+        )
         _boot_db()
+        _boot_status.update(
+            label="Setup complete — all data is ready.",
+            state="complete",
+            expanded=False,
+        )
 
     # --- Top bar: logo + disclaimer + STEP 1 API key ---
     col_logo, col_key = st.columns([3, 2])
