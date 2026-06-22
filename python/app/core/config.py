@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     sec_user_agent: str = "StockForensics research <you@example.com>"
 
     # Universe / sizing
-    top_n: int = 25
+    top_n: int = 10
     universe_auto_refresh: bool = True
     universe_ttl_hours: int = 24
 
