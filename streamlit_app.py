@@ -54,7 +54,8 @@ header[data-testid="stHeader"] { display: none; }
     border-radius: 12px;
     padding: 16px 18px;
     box-shadow: 0 1px 3px rgba(20,30,50,.05);
-    min-height: 130px;
+    height: 160px;
+    overflow: hidden;
 }
 .sf-card-label {
     color: #7b8798; font-size: 11px; font-weight: 700;
@@ -194,6 +195,11 @@ div[data-testid="stButton"] > button:hover { opacity: 0.82; }
     font-size: 11px; font-weight: 600;
     padding: 2px 8px; border-radius: 999px;
     display: inline-block; margin-left: 8px; vertical-align: middle;
+}
+
+/* AI thinking stream box - scrollbar always visible */
+.st-key-sf_stream_box div[style*="overflow"] {
+    overflow-y: scroll !important;
 }
 </style>
 """
@@ -614,7 +620,7 @@ def _run_analysis_stream(ticker: str, title_ph: Any = None) -> None:
 
     st.session_state["_streaming_ticker"] = ticker.upper()
 
-    stream_box = st.container(height=280)
+    stream_box = st.container(height=280, key="sf_stream_box")
     placeholder = stream_box.empty()
     stages_html = ""
 
@@ -695,26 +701,17 @@ def _render_composite_analysis(detail: dict[str, Any], streaming: bool = False) 
 
 def _render_qualitative_narrative(detail: dict[str, Any]) -> None:
     narrative = detail.get("narrative", "")
-    cites = detail.get("citations") or st.session_state.get("citations", [])
     if not narrative:
         return
     st.markdown(
         f'<div class="sf-panel">'
         f'<div class="sf-panel-title">Qualitative Narrative</div>'
-        f'<div style="font-size:14px;line-height:1.75;color:#1e2733">{narrative}</div>'
+        f'<div style="font-size:14px;line-height:1.75;color:#1e2733;'
+        f'height:200px;overflow-y:scroll;overflow-x:hidden;padding-right:4px">'
+        f"{narrative}</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
-    if cites:
-        links = " &nbsp;&middot;&nbsp; ".join(
-            f'<a href="{c.get("url","#")}" target="_blank" style="color:#2563eb;font-size:12px">'
-            f'{c.get("title","Source")}</a>'
-            for c in cites
-        )
-        st.markdown(
-            f'<div style="margin:-12px 0 18px;color:#7b8798;font-size:12px">Sources: {links}</div>',
-            unsafe_allow_html=True,
-        )
 
 
 def _render_thinking_replay(detail: dict[str, Any]) -> None:
@@ -731,7 +728,7 @@ def _render_thinking_replay(detail: dict[str, Any]) -> None:
         f"</div>",
         unsafe_allow_html=True,
     )
-    stream_box = st.container(height=280)
+    stream_box = st.container(height=280, key="sf_stream_box")
     html = ""
     for s in thinking:
         html += (
@@ -985,6 +982,19 @@ def main() -> None:
                 unsafe_allow_html=True,
             )
             _run_analysis_stream(ticker, title_ph=_title_ph)
+
+    # Sources (citations) pushed to bottom
+    cites = detail.get("citations") or st.session_state.get("citations", [])
+    if cites:
+        links = " &nbsp;&middot;&nbsp; ".join(
+            f'<a href="{c.get("url","#")}" target="_blank" style="color:#2563eb;font-size:12px">'
+            f'{c.get("title","Source")}</a>'
+            for c in cites
+        )
+        st.markdown(
+            f'<div style="margin-bottom:18px;color:#7b8798;font-size:12px">Sources: {links}</div>',
+            unsafe_allow_html=True,
+        )
 
     # How to use (always visible at bottom)
     _render_how_to_use()

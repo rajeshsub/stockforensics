@@ -18,6 +18,8 @@ Integrity scores **deterministically in code**. An LLM supplies only qualitative
 narrative + structured promoter evidence that code then thresholds. **Never says
 buy/sell. Educational research only.**
 
+Live on Hugging Face Spaces: https://huggingface.co/spaces/rajeshsub/stock-forensics
+
 Hosted as a Streamlit Cloud / Hugging Face Spaces app. The scoring engine is
 imported directly into the Streamlit script with no HTTP layer. See `plan.md`
 for the full design and decision log.
