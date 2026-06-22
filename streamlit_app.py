@@ -248,15 +248,7 @@ def _boot_db() -> None:
     if not count:
         from app.db.seed import seed
 
-        if s.has("gemini_api_key"):
-            try:
-                n = seed(force_fixtures=False)
-            except Exception:
-                n = 0
-            if not n:
-                seed(force_fixtures=True)
-        else:
-            seed(force_fixtures=True)
+        seed()
 
 
 @st.cache_resource
