@@ -56,8 +56,14 @@ def build_prompt(ticker: str, context: str, name: str | None = None) -> str:
         "[ceo_tenure, public_co_experience, sec_enforcement, criminal_record, "
         'related_party], "value": number|boolean|null, "severity": '
         '"none|low|medium|high", "finding": str, "source_urls": [str]}], '
-        '"citations": [{"title": str, "url": str}]}. Do NOT compute any financial '
-        "figure or score; report only qualitative evidence; code will threshold it.\n\n"
+        '"citations": [{"title": str, "url": str}]}. '
+        "You MUST include exactly one entry for EACH of the 5 criteria in "
+        "promoter_findings (ceo_tenure, public_co_experience, sec_enforcement, "
+        "criminal_record, related_party) - include positive findings too (use "
+        'severity "none" when the criterion is met). For ceo_tenure use value=years '
+        "as a number. For public_co_experience use value=true/false. "
+        "Do NOT compute any financial figure or score; report only qualitative "
+        "evidence; code will threshold it.\n\n"
         f"SEC FILING EXCERPTS:\n{context or '(none)'}"
     )
 

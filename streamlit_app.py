@@ -54,6 +54,7 @@ header[data-testid="stHeader"] { display: none; }
     border-radius: 12px;
     padding: 16px 18px;
     box-shadow: 0 1px 3px rgba(20,30,50,.05);
+    min-height: 130px;
 }
 .sf-card-label {
     color: #7b8798; font-size: 11px; font-weight: 700;
@@ -525,7 +526,7 @@ def _render_breakdown(detail: dict[str, Any], dim_key: str) -> None:
     for c in breakdown:
         prov = c.get("provenance", "CODE")
         tag_cls = "sf-tag-llm" if prov == "LLM-EVIDENCE" else "sf-tag"
-        tag_lbl = "LLM" if prov == "LLM-EVIDENCE" else "CODE"
+        tag_lbl = "AI Analysis" if prov == "LLM-EVIDENCE" else "SEC EDGAR"
         status = c.get("status", "NA")
         if status == "PASS":
             sym_cell = '<td style="color:#10b981;font-size:16px;font-weight:700;text-align:center">&#10003;</td>'
@@ -655,8 +656,7 @@ def _run_analysis_stream(ticker: str, title_ph: Any = None) -> None:
             "</div>",
             unsafe_allow_html=True,
         )
-    if citations:
-        st.session_state["citations"] = citations
+    st.session_state["citations"] = citations
     st.rerun()
 
 
@@ -971,18 +971,11 @@ def main() -> None:
     # Qualitative narrative (full width, only when available)
     _render_qualitative_narrative(detail)
 
-    # Clear streaming lock once the result is available
-    if _is_streaming and has_result and _streaming_ticker == ticker:
-        del st.session_state["_streaming_ticker"]
-        st.rerun()
-
-    # AI analysis panel - always in the same st.empty() slot so it never ghosts
-    _analysis_slot = st.empty()
-    if has_result:
-        with _analysis_slot.container(border=True):
+    # AI analysis panel - keyed by ticker so Streamlit replaces it atomically on stock change
+    with st.container(border=True, key=f"analysis_{ticker}"):
+        if has_result:
             _render_thinking_replay(detail)
-    else:
-        with _analysis_slot.container(border=True):
+        else:
             _title_ph = st.empty()
             _title_ph.markdown(
                 '<div style="margin-bottom:10px">'
@@ -1006,6 +999,12 @@ def main() -> None:
         "</div>",
         unsafe_allow_html=True,
     )
+
+    # Clear streaming lock after everything is rendered so the panel is never missing
+    # during the transition rerun (previously this fired before the panel was drawn)
+    if _is_streaming and has_result and _streaming_ticker == ticker:
+        del st.session_state["_streaming_ticker"]
+        st.rerun()
 
 
 if __name__ == "__main__":
