@@ -1036,12 +1036,20 @@ def main() -> None:
         for c in cites:
             url = c.get("url", "")
             title = c.get("title", "") or c.get("domain", "") or "Source"
-            if url and "vertexaisearch.cloud.google.com" not in url:
+            domain = c.get("domain", "")
+            if url and "vertexaisearch.cloud.google.com" in url and domain:
+                # Vertex AI redirect URLs are session-bound and break in the browser;
+                # link to the source domain directly instead.
+                link_url = f"https://{domain}"
+                parts.append(
+                    f'<a href="{link_url}" target="_blank" style="color:#2563eb;font-size:12px">{title}</a>'
+                )
+            elif url:
                 parts.append(
                     f'<a href="{url}" target="_blank" style="color:#2563eb;font-size:12px">{title}</a>'
                 )
             else:
-                label = title if title != "Source" else c.get("domain", "Source")
+                label = title if title != "Source" else domain or "Source"
                 parts.append(
                     f'<span style="font-size:12px;color:#1e2733">{label}</span>'
                 )
