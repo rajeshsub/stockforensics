@@ -4,6 +4,7 @@ descriptive User-Agent per SEC policy. Smoke-tested, not in the gating suite."""
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 import httpx
 
@@ -14,6 +15,9 @@ FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 ARCHIVE_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{acc}/{doc}"
 MAX_DOC_CHARS = 40_000
+# Stop scanning source HTML after this many chars even if we haven't filled
+# MAX_DOC_CHARS of visible text, so a multi-MB inline-XBRL filing can't OOM us.
+MAX_SCAN_CHARS = 8_000_000
 
 
 class HttpxSecClient:
@@ -73,9 +77,36 @@ class HttpxSecClient:
         return out
 
     def _fetch_text(self, url: str) -> str:
+        """Stream the filing and strip HTML tags incrementally, stopping once we have
+        enough visible text. Avoids decoding a multi-MB filing into memory at once."""
         try:
-            html = self._get(url).text
+            with self._client.stream("GET", url) as r:
+                r.raise_for_status()
+                return _strip_tags_streaming(r.iter_text(), MAX_DOC_CHARS, MAX_SCAN_CHARS)
         except httpx.HTTPError:
             return ""
-        text = re.sub(r"<[^>]+>", " ", html)
-        return re.sub(r"\s+", " ", text)[:MAX_DOC_CHARS]
+
+
+def _strip_tags_streaming(chunks: Iterable[str], limit: int, scan_cap: int) -> str:
+    """Strip `<...>` tags from a stream of text chunks, collecting up to `limit` chars
+    of visible text (or after scanning `scan_cap` source chars). A partial tag split
+    across a chunk boundary is carried forward so it is stripped intact."""
+    pieces: list[str] = []
+    visible = 0
+    scanned = 0
+    carry = ""
+    for chunk in chunks:
+        scanned += len(chunk)
+        data = carry + chunk
+        # If an unclosed '<' trails the buffer, hold it back so the tag isn't split.
+        lt, gt = data.rfind("<"), data.rfind(">")
+        if lt > gt:
+            carry, data = data[lt:], data[:lt]
+        else:
+            carry = ""
+        cleaned = re.sub(r"<[^>]+>", " ", data)
+        pieces.append(cleaned)
+        visible += len(cleaned)
+        if visible >= limit or scanned >= scan_cap:
+            break
+    return re.sub(r"\s+", " ", "".join(pieces))[:limit]

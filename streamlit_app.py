@@ -6,7 +6,6 @@ Deterministic scoring imported directly; no HTTP layer.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from datetime import UTC, datetime, timedelta
@@ -258,17 +257,13 @@ def _ago_text(run_date: Any) -> str:
 
 
 def _parse_sse(stream: Any) -> Any:
-    """Yield (event_type, data_dict) pairs from an analyze_stream iterator."""
-    event_type = ""
-    for chunk in stream:
-        for line in chunk.split("\n"):
-            if line.startswith("event: "):
-                event_type = line[7:].strip()
-            elif line.startswith("data: "):
-                try:
-                    yield event_type, json.loads(line[6:])
-                except json.JSONDecodeError:
-                    pass
+    """Yield (event_type, data_dict) pairs from a live-analysis SSE stream.
+
+    Delegates to the shared wire-format parser so the UI and the contract test
+    agree on framing (decision #27)."""
+    from app.pipeline.sse import parse_sse
+
+    yield from parse_sse(stream)
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +452,7 @@ def _render_score_cards(detail: dict[str, Any]) -> None:
         with col:
             st.markdown(_card_html(key, label), unsafe_allow_html=True)
             if scores.get(key, {}).get("breakdown"):
-                if st.button("More info", key=f"mi_{key}", use_container_width=True):
+                if st.button("More info", key=f"mi_{key}", width="stretch"):
                     _breakdown_dialog(detail, key, label)
 
     cols1 = st.columns(3)
@@ -479,7 +474,7 @@ def _render_score_cards(detail: dict[str, Any]) -> None:
             f"</div>",
             unsafe_allow_html=True,
         )
-        if st.button("More info", key="mi_overall", use_container_width=True):
+        if st.button("More info", key="mi_overall", width="stretch"):
             _composite_score_dialog(detail)
 
 
@@ -522,7 +517,7 @@ def _render_radar(detail: dict[str, Any]) -> None:
         height=300,
         paper_bgcolor="rgba(0,0,0,0)",
     )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
 def _render_breakdown(detail: dict[str, Any], dim_key: str) -> None:
@@ -621,12 +616,13 @@ def _composite_score_dialog(detail: dict[str, Any]) -> None:
 
 def _run_analysis_stream(ticker: str, title_ph: Any = None) -> None:
     """Stream AI analysis, updating a scrollable panel as events arrive."""
-    from app.pipeline.analyze import analyze_stream
+    from app.pipeline.graph import run_live_analysis
 
+    engine = st.session_state.get("engine", "linear")
     st.session_state["_streaming_ticker"] = ticker.upper()
 
-    # 9 named stages: resolving, filings, chunking, embedding, retrieving,
-    # reasoning, evidence, scoring, scored
+    # 9 named stages on the linear path; the agentic engine emits more (its research
+    # loop repeats reasoning/evidence), so the percentage simply clamps to 99 until done.
     _TOTAL_STAGES = 9
     stages_seen = 0
 
@@ -654,7 +650,9 @@ def _run_analysis_stream(ticker: str, title_ph: Any = None) -> None:
 
     citations: list[dict[str, Any]] = []
 
-    for event_type, data in _parse_sse(analyze_stream(_get_adapters(), ticker)):
+    for event_type, data in _parse_sse(
+        run_live_analysis(_get_adapters(), ticker, engine=engine)
+    ):
         if event_type == "stage":
             stages_seen += 1
             pct = min(round(stages_seen / _TOTAL_STAGES * 100), 99)
@@ -708,7 +706,7 @@ def _render_composite_analysis(detail: dict[str, Any], streaming: bool = False) 
             unsafe_allow_html=True,
         )
         if len(text) > PREVIEW:
-            if st.button("More info", key="mi_composite", use_container_width=True):
+            if st.button("More info", key="mi_composite", width="stretch"):
                 _composite_dialog(text)
     elif streaming:
         st.markdown(
@@ -884,7 +882,7 @@ def main() -> None:
                     label_visibility="collapsed",
                 )
                 submitted = st.form_submit_button(
-                    "Unlock", use_container_width=True, type="primary"
+                    "Unlock", width="stretch", type="primary"
                 )
                 if submitted:
                     if _key_valid(entered_key):
@@ -954,6 +952,30 @@ def main() -> None:
             f"AI analysis is running for **{_streaming_name}** - stock selection is locked until it completes.",
             icon="⏳",
         )
+
+    # Engine toggle (decision #26): Linear (single-pass RAG + grounded call) vs the
+    # LangGraph agentic loop. Default from settings; locked while a run is in flight.
+    from app.core.config import get_settings as _get_settings
+
+    _engine_options = ["Linear pipeline", "LangGraph (agentic)"]
+    _engine_label = st.radio(
+        "Analysis engine",
+        _engine_options,
+        index=1 if _get_settings().langgraph_agent else 0,
+        captions=[
+            "Faster. Reads the filings once and scores every criterion in a single AI pass.",
+            "Smarter. When evidence for a criterion looks thin, the AI digs back in and "
+            "re-researches it before scoring. Slower, deeper.",
+        ],
+        horizontal=True,
+        key="engine_select",
+        disabled=_is_streaming,
+        help="Linear: one grounded pass over all governance criteria. LangGraph: an "
+        "agentic loop that re-researches criteria with thin evidence (decisions #23-28).",
+    )
+    st.session_state["engine"] = (
+        "langgraph" if _engine_label.startswith("LangGraph") else "linear"
+    )
 
     if selected_display is None:
         st.markdown(

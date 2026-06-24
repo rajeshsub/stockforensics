@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     gemini_embed_model: str = "gemini-embedding-001"
     gemini_rpm: int = 10
 
+    # Live-analysis engine (decision #26). False = linear analyze_stream (deploy default);
+    # True = LangGraph agentic graph. The Streamlit toggle overrides this per run.
+    langgraph_agent: bool = False
+    # Agentic research loop bound (decision #25): max research<->assess iterations.
+    agent_max_iters: int = 3
+
     # Access control (gatekeeping for hosted deployments)
     api_key: str = ""
 
