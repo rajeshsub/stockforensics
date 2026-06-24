@@ -6,7 +6,10 @@ The DB schema and Pinecone index are kept; only their contents are cleared."""
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from sqlalchemy import delete
+from sqlalchemy.engine import CursorResult
 
 from app.core.config import get_settings
 from app.db.engine import session_scope
@@ -18,7 +21,8 @@ _TABLES = (CompanyScore, PipelineRun, LlmCache, EmbeddingCache)
 def clear_sqlite() -> None:
     with session_scope() as s:
         for model in _TABLES:
-            n = s.execute(delete(model)).rowcount
+            result = cast("CursorResult[Any]", s.execute(delete(model)))
+            n = result.rowcount
             print(f"sqlite: cleared {model.__tablename__} ({n} rows)")
 
 
