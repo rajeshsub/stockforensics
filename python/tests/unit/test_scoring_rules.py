@@ -76,6 +76,22 @@ def test_munger_quality_continuous():
     assert r.earned_fraction == pytest.approx(0.9)
 
 
+def test_munger_quality_falls_back_to_net_margin_for_banks():
+    # Banks file no cost-of-revenue -> no gross margin. Net margin keeps Quality scorable
+    # instead of NA'ing the whole Munger dimension (the JPM "0%" bug).
+    r = SR.ev_munger_quality(_cd(roe=[20, 20, 20], gross_margin=[], net_margin=[25, 25, 25]))
+    assert r.status is Status.PASS
+    # (20/25)*5 + (25/25)*5 = 9.0 -> fraction 0.9
+    assert r.earned_fraction == pytest.approx(0.9)
+    assert "NM" in (r.reason or "")
+
+
+def test_munger_quality_na_without_any_margin():
+    assert SR.ev_munger_quality(_cd(roe=[20, 20, 20], gross_margin=[], net_margin=[])).status is (
+        Status.NA
+    )
+
+
 def test_ownership_code():
     assert SR.ev_ownership(_cd(insider_ownership_pct=2.0)).status is Status.PASS
     assert SR.ev_ownership(_cd(insider_ownership_pct=0.5)).status is Status.FAIL
