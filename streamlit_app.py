@@ -340,15 +340,20 @@ def _get_adapters() -> Any:
 
 
 def _key_valid(entered: str) -> bool:
-    """True when entered key matches API_KEY setting.
+    """True when entered key matches the API_KEY setting.
+
+    API_KEY may hold a single key or a comma-separated list of keys (with an
+    optional trailing comma and arbitrary surrounding whitespace). The entered
+    key is accepted when it matches any key in the list.
     If API_KEY is not configured, any non-empty string is accepted (dev mode).
     """
     from app.core.config import get_settings
 
     configured = get_settings().api_key
-    if not configured:
+    valid_keys = [k.strip() for k in configured.split(",") if k.strip()]
+    if not valid_keys:
         return bool(entered)
-    return entered == configured
+    return entered in valid_keys
 
 
 # ---------------------------------------------------------------------------
