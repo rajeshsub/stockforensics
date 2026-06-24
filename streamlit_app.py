@@ -614,6 +614,16 @@ def _composite_score_dialog(detail: dict[str, Any]) -> None:
         st.markdown(narrative)
 
 
+def _render_lock_info(ph: Any, name: str, pct: int | None) -> None:
+    """Render the 'analysis is running' lock banner, with live % when available."""
+    suffix = f" **{pct}% complete…**" if pct is not None else ""
+    ph.info(
+        f"AI analysis is running for **{name}** - stock selection is "
+        f"locked until it completes.{suffix}",
+        icon="⏳",
+    )
+
+
 def _run_analysis_stream(ticker: str, title_ph: Any = None) -> None:
     """Stream AI analysis, updating a scrollable panel as events arrive."""
     from app.pipeline.graph import run_live_analysis
@@ -636,13 +646,20 @@ def _run_analysis_stream(ticker: str, title_ph: Any = None) -> None:
         placeholder.markdown(stages_html, unsafe_allow_html=True)
 
     def _update_title(pct: int) -> None:
+        _lock_ph = st.session_state.get("_lock_info_ph")
+        if _lock_ph is not None:
+            _render_lock_info(
+                _lock_ph, st.session_state.get("_lock_info_name", ""), pct
+            )
         if title_ph is None:
             return
         title_ph.markdown(
             f'<div style="margin-bottom:10px">'
             f'<span class="sf-live-dot"></span>'
             f'<span class="sf-panel-title">AI Agent Analysis &amp; Thinking</span>'
-            f'<span style="color:#7b8798;font-size:12px;margin-left:10px">'
+            f'<span style="display:inline-block;margin-left:10px;padding:2px 10px;'
+            f"border-radius:999px;background:#fef3c7;color:#b45309;font-size:13px;"
+            f'font-weight:700">'
             f"Please wait &mdash; {pct}% complete&hellip;</span>"
             f"</div>",
             unsafe_allow_html=True,
@@ -948,16 +965,17 @@ def main() -> None:
             (c["name"] for c in companies if c["ticker"] == _streaming_ticker),
             _streaming_ticker,
         )
-        st.info(
-            f"AI analysis is running for **{_streaming_name}** - stock selection is locked until it completes.",
-            icon="⏳",
-        )
+        # Placeholder so the live stream can update this box with the % complete.
+        _lock_info_ph = st.empty()
+        st.session_state["_lock_info_ph"] = _lock_info_ph
+        st.session_state["_lock_info_name"] = _streaming_name
+        _render_lock_info(_lock_info_ph, _streaming_name, None)
 
     # Engine toggle (decision #26): Linear (single-pass RAG + grounded call) vs the
     # LangGraph agentic loop. Default from settings; locked while a run is in flight.
     from app.core.config import get_settings as _get_settings
 
-    _engine_options = ["Linear pipeline", "LangGraph (agentic)"]
+    _engine_options = ["Linear pipeline", "LangGraph (deep research)"]
     _engine_label = st.radio(
         "Analysis engine",
         _engine_options,
@@ -970,11 +988,11 @@ def main() -> None:
         horizontal=True,
         key="engine_select",
         disabled=_is_streaming,
-        help="Linear: one grounded pass over all governance criteria. LangGraph: an "
-        "agentic loop that re-researches criteria with thin evidence (decisions #23-28).",
+        help="Linear: one grounded pass over all governance criteria. LangGraph: a "
+        "deep-research loop that re-researches criteria with thin evidence (decisions #23-28).",
     )
     st.session_state["engine"] = (
-        "langgraph" if _engine_label.startswith("LangGraph") else "linear"
+        "langgraph" if _engine_label == _engine_options[1] else "linear"
     )
 
     if selected_display is None:
@@ -1034,11 +1052,23 @@ def main() -> None:
     # Qualitative narrative (full width, only when available)
     _render_qualitative_narrative(detail)
 
-    # AI analysis panel - keyed by ticker so Streamlit replaces it atomically on stock change
-    with st.container(border=True, key=f"analysis_{ticker}"):
+    # AI analysis panel - STABLE key so Streamlit reuses the same DOM node and
+    # replaces its contents on stock change. A per-ticker key (analysis_{ticker})
+    # instead creates a new node per ticker and leaves the previous ticker's node
+    # behind as a ghost when the mid-stream st.rerun() interleaves, which is what
+    # produced the duplicate "AI Agent Analysis" panel.
+    with st.container(border=True, key="ai_analysis_panel"):
         if has_result:
             _render_thinking_replay(detail)
         else:
+            # Lock the stock selector and engine toggle BEFORE the (long) stream
+            # starts. Those widgets are drawn near the top of the script, so on the
+            # pass that first selects a stock the lock flag isn't set yet and they
+            # render enabled. Set the flag and rerun once so they redraw disabled,
+            # then run the stream on that already-locked pass.
+            if st.session_state.get("_streaming_ticker") != ticker.upper():
+                st.session_state["_streaming_ticker"] = ticker.upper()
+                st.rerun()
             _title_ph = st.empty()
             _title_ph.markdown(
                 '<div style="margin-bottom:10px">'
