@@ -5,7 +5,6 @@ list can show the cached value (Q21). Adapters injected -> offline (fixtures) or
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +24,8 @@ from app.core.logging import get_logger
 from app.db.engine import session_scope
 from app.db.models import CompanyScore
 from app.db.repository import save_company_score
+from app.pipeline.sse import sse_event as _sse
+from app.pipeline.sse import stage_event as _stage
 from app.rag.chunk import chunk_filings
 from app.transform.models import CompanyFinancials
 from app.transform.weighted_scorer import composite_pct, score_all
@@ -117,14 +118,6 @@ def analyze_company(adapters: Adapters, session: Session, ticker: str) -> dict[s
         "composite_pct": round(composite_pct(dims), 1),
         "promoter": dims["promoter_integrity"].to_dict(),
     }
-
-
-def _sse(event: dict[str, Any]) -> str:
-    return f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
-
-
-def _stage(stage: str, message: str) -> str:
-    return _sse({"type": "stage", "stage": stage, "message": message})
 
 
 def analyze_stream(adapters: Adapters, ticker: str) -> Iterator[str]:
