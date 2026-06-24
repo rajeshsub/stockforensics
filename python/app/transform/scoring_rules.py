@@ -260,18 +260,24 @@ def ev_revenue_growth_consistency(cd: CompanyFinancials) -> CriterionResult:
 def ev_munger_quality(cd: CompanyFinancials) -> CriterionResult:
     rw = R.window(cd.roe, REQ_WINDOW)
     gw = R.window(cd.gross_margin, REQ_WINDOW)
-    if len(rw) < CONSISTENCY_FLOOR or len(gw) < CONSISTENCY_FLOOR:
-        return _na("need >=3yr ROE + gross margin")
+    # Banks/financials don't file cost-of-revenue, so gross margin is unavailable.
+    # Fall back to net margin (with its own, lower ceiling) so the criterion still
+    # scores pricing-power/profitability instead of collapsing the whole dimension to NA.
+    use_gross = len(gw) >= CONSISTENCY_FLOOR
+    mw = gw if use_gross else R.window(cd.net_margin, REQ_WINDOW)
+    if len(rw) < CONSISTENCY_FLOOR or len(mw) < CONSISTENCY_FLOOR:
+        return _na("need >=3yr ROE + (gross or net) margin")
     mr = R.mean(rw)
-    mg = R.mean(gw)
-    if mr is None or mg is None:
+    mm = R.mean(mw)
+    if mr is None or mm is None:
         return _na("quality inputs undefined")
-    sub = (mr / 25.0) * 5.0 + (mg / 50.0) * 5.0
+    margin_ceiling, margin_label = (50.0, "GM") if use_gross else (25.0, "NM")
+    sub = (mr / 25.0) * 5.0 + (mm / margin_ceiling) * 5.0
     return _continuous(
         sub,
         f"{_clamp(sub, 0, 10):.1f}/10",
-        f"ROE μ{mr:.1f}%, GM μ{mg:.1f}%",
-        R.window_label(min(len(rw), len(gw)), REQ_WINDOW),
+        f"ROE μ{mr:.1f}%, {margin_label} μ{mm:.1f}%",
+        R.window_label(min(len(rw), len(mw)), REQ_WINDOW),
     )
 
 

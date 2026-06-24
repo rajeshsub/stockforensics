@@ -459,14 +459,25 @@ def _render_score_cards(detail: dict[str, Any]) -> None:
 
     def _card_html(key: str, label: str) -> str:
         d = scores.get(key, {})
+        if key == "promoter_integrity" and not detail["promoter_live"]:
+            return _promoter_pending_card_html(None)
+        # max_score == 0 means no criterion could be evaluated (e.g. a bank with no
+        # gross-margin/capex data) -> show N/A, not a misleading 0%.
+        if d.get("max_score", 0) <= 0:
+            return (
+                f'<div class="sf-card">'
+                f'<div class="sf-card-label">{label}</div>'
+                f'<div class="sf-card-score" style="color:#7b8798">N/A</div>'
+                f'<div class="sf-bar"><i style="width:0%"></i></div>'
+                f'<div class="sf-card-meta"><span>not scorable</span><span>conf 0.00</span></div>'
+                f"</div>"
+            )
         pct = d.get("normalized_pct", 0)
         score = d.get("score", 0)
         max_s = d.get("max_score", 0) or d.get("nominal_max", 10)
         conf = d.get("confidence", 0)
         color = _score_color(pct)
         lbl = _score_label(pct)
-        if key == "promoter_integrity" and not detail["promoter_live"]:
-            return _promoter_pending_card_html(None)
         return (
             f'<div class="sf-card">'
             f'<div class="sf-card-label">{label}</div>'
@@ -620,6 +631,15 @@ def _composite_score_dialog(detail: dict[str, Any]) -> None:
     rows = ""
     for key, label in dim_order:
         d = detail["scores"].get(key, {})
+        if d.get("max_score", 0) <= 0:
+            # Not scorable for this company -> excluded from the composite average.
+            rows += (
+                f"<tr><td>{label}</td>"
+                f"<td class='r' style='color:#7b8798'>N/A</td>"
+                f"<td class='r' style='color:#7b8798'>-</td>"
+                f"<td style='color:#7b8798'>not scorable</td></tr>"
+            )
+            continue
         pct = d.get("normalized_pct", 0)
         score = d.get("score", 0)
         max_s = d.get("max_score", 0) or d.get("nominal_max", 10)
@@ -860,18 +880,24 @@ def _render_weight_editor(detail: dict[str, Any]) -> None:
             with col:
                 dim_weights[key] = st.slider(label, 0.0, 2.0, 1.0, 0.1, key=f"w_{key}")
 
-        total_w = sum(dim_weights.values())
+        # Only dimensions that are actually scorable (max_score > 0) participate, so an
+        # N/A dimension (e.g. Munger for a bank) doesn't drag the composite toward 0.
+        scorable = {
+            k: w
+            for k, w in dim_weights.items()
+            if scores.get(k, {}).get("max_score", 0) > 0
+        }
+        total_w = sum(scorable.values())
         if total_w > 0:
             weighted = (
-                sum(
-                    scores.get(k, {}).get("normalized_pct", 0) * w
-                    for k, w in dim_weights.items()
-                )
+                sum(scores[k].get("normalized_pct", 0) * w for k, w in scorable.items())
                 / total_w
             )
             st.success(f"Weighted Composite: {weighted:.1f}%")
-        else:
+        elif sum(dim_weights.values()) == 0:
             st.warning("All weights are zero - nothing to compute.")
+        else:
+            st.warning("No scorable dimensions among the weighted selections.")
 
 
 def _render_how_to_use() -> None:
