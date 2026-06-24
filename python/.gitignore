@@ -12,3 +12,7 @@ data/stockforensics.db-*
 *.egg-info/
 dist/
 build/
+
+# Local-only cache-clearing helper (not for commit)
+app/db/clear.py
+clear.bat
