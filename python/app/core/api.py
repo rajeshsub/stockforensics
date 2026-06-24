@@ -44,9 +44,10 @@ class _APIKeyMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         if request.url.path.startswith("/api/"):
             s = get_settings()
-            if s.api_key:
+            valid_keys = [k.strip() for k in s.api_key.split(",") if k.strip()]
+            if valid_keys:
                 key = request.headers.get("X-Api-Key") or request.query_params.get("api_key")
-                if key != s.api_key:
+                if key not in valid_keys:
                     return JSONResponse({"detail": "invalid or missing API key"}, status_code=403)
         return await call_next(request)
 
