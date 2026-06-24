@@ -409,6 +409,44 @@ def _load_detail(ticker: str) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 
 
+def _pct_pill(pct: int | None) -> str:
+    """Amber 'Please wait — X% complete…' pill, shared across every live-progress
+    spot so the percentage is shown identically wherever a run is in flight."""
+    if pct is None:
+        return ""
+    return (
+        '<span style="display:inline-block;margin-left:10px;padding:2px 10px;'
+        "border-radius:999px;background:#fef3c7;color:#b45309;font-size:13px;"
+        'font-weight:700">'
+        f"Please wait &mdash; {pct}% complete&hellip;</span>"
+    )
+
+
+def _promoter_pending_card_html(pct: int | None) -> str:
+    """The Promoter Integrity 'Score pending AI run' card, with the live % pill."""
+    return (
+        '<div class="sf-card">'
+        '<div class="sf-card-label">Promoter Integrity</div>'
+        '<div class="sf-card-score" style="color:#7b8798;font-size:15px;font-weight:600;margin-top:10px;line-height:1.4">'
+        f'<span class="sf-live-dot"></span>Score pending AI run{_pct_pill(pct)}</div>'
+        '<div class="sf-bar"><i style="width:0%;background:#e6ebf2"></i></div>'
+        '<div class="sf-card-meta" style="font-size:11px;color:#9ca8b6">'
+        "<span>Evaluates CEO track record, SEC enforcement history &amp; governance via live web search</span>"
+        "</div>"
+        "</div>"
+    )
+
+
+def _composite_title_html(pct: int | None) -> str:
+    """The 'AI Composite Analysis' panel title while streaming, with the live % pill."""
+    return (
+        '<div style="margin-bottom:8px">'
+        '<span class="sf-live-dot"></span>'
+        '<span class="sf-panel-title">AI Composite Analysis</span>'
+        f"{_pct_pill(pct)}</div>"
+    )
+
+
 def _render_score_cards(detail: dict[str, Any]) -> None:
     scores = detail["scores"]
     dim_order = [
@@ -428,17 +466,7 @@ def _render_score_cards(detail: dict[str, Any]) -> None:
         color = _score_color(pct)
         lbl = _score_label(pct)
         if key == "promoter_integrity" and not detail["promoter_live"]:
-            return (
-                f'<div class="sf-card">'
-                f'<div class="sf-card-label">{label}</div>'
-                f'<div class="sf-card-score" style="color:#7b8798;font-size:15px;font-weight:600;margin-top:10px;line-height:1.4">'
-                f'<span class="sf-live-dot"></span>Score pending AI run</div>'
-                f'<div class="sf-bar"><i style="width:0%;background:#e6ebf2"></i></div>'
-                f'<div class="sf-card-meta" style="font-size:11px;color:#9ca8b6">'
-                f"<span>Evaluates CEO track record, SEC enforcement history &amp; governance via live web search</span>"
-                f"</div>"
-                f"</div>"
-            )
+            return _promoter_pending_card_html(None)
         return (
             f'<div class="sf-card">'
             f'<div class="sf-card-label">{label}</div>'
@@ -450,6 +478,12 @@ def _render_score_cards(detail: dict[str, Any]) -> None:
 
     def _render_dim_col(col: Any, key: str, label: str) -> None:
         with col:
+            if key == "promoter_integrity" and not detail["promoter_live"]:
+                # Live placeholder so the stream can update this card with the % pill.
+                ph = st.empty()
+                ph.markdown(_promoter_pending_card_html(None), unsafe_allow_html=True)
+                st.session_state["_promoter_ph"] = ph
+                return
             st.markdown(_card_html(key, label), unsafe_allow_html=True)
             if scores.get(key, {}).get("breakdown"):
                 if st.button("More info", key=f"mi_{key}", width="stretch"):
@@ -615,12 +649,17 @@ def _composite_score_dialog(detail: dict[str, Any]) -> None:
 
 
 def _render_lock_info(ph: Any, name: str, pct: int | None) -> None:
-    """Render the 'analysis is running' lock banner, with live % when available."""
-    suffix = f" **{pct}% complete…**" if pct is not None else ""
-    ph.info(
-        f"AI analysis is running for **{name}** - stock selection is "
-        f"locked until it completes.{suffix}",
-        icon="⏳",
+    """Render the 'analysis is running' lock banner, with the live % pill when
+    available. Rendered as custom HTML (not st.info) so the amber pill can sit inline."""
+    ph.markdown(
+        '<div style="background:#e8f1fb;border:1px solid #b9d6f5;border-radius:8px;'
+        "padding:12px 16px;color:#1e3a5f;font-size:14px;display:flex;"
+        'align-items:center;gap:8px;flex-wrap:wrap">'
+        '<span style="font-size:16px">&#9203;</span>'
+        f"<span>AI analysis is running for <strong>{name}</strong> - stock "
+        f"selection is locked until it completes.{_pct_pill(pct)}</span>"
+        "</div>",
+        unsafe_allow_html=True,
     )
 
 
@@ -651,16 +690,19 @@ def _run_analysis_stream(ticker: str, title_ph: Any = None) -> None:
             _render_lock_info(
                 _lock_ph, st.session_state.get("_lock_info_name", ""), pct
             )
+        _prom_ph = st.session_state.get("_promoter_ph")
+        if _prom_ph is not None:
+            _prom_ph.markdown(_promoter_pending_card_html(pct), unsafe_allow_html=True)
+        _comp_ph = st.session_state.get("_composite_title_ph")
+        if _comp_ph is not None:
+            _comp_ph.markdown(_composite_title_html(pct), unsafe_allow_html=True)
         if title_ph is None:
             return
         title_ph.markdown(
             f'<div style="margin-bottom:10px">'
             f'<span class="sf-live-dot"></span>'
             f'<span class="sf-panel-title">AI Agent Analysis &amp; Thinking</span>'
-            f'<span style="display:inline-block;margin-left:10px;padding:2px 10px;'
-            f"border-radius:999px;background:#fef3c7;color:#b45309;font-size:13px;"
-            f'font-weight:700">'
-            f"Please wait &mdash; {pct}% complete&hellip;</span>"
+            f"{_pct_pill(pct)}"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -709,12 +751,17 @@ def _run_analysis_stream(ticker: str, title_ph: Any = None) -> None:
 
 def _render_composite_analysis(detail: dict[str, Any], streaming: bool = False) -> None:
     text = detail.get("composite_narrative", "")
-    title_prefix = '<span class="sf-live-dot"></span>' if streaming else ""
-    st.markdown(
-        f'<div style="margin-bottom:8px">{title_prefix}'
-        f'<span class="sf-panel-title">AI Composite Analysis</span></div>',
-        unsafe_allow_html=True,
-    )
+    if streaming:
+        # Live placeholder so the stream can update the title with the % pill.
+        ph = st.empty()
+        ph.markdown(_composite_title_html(None), unsafe_allow_html=True)
+        st.session_state["_composite_title_ph"] = ph
+    else:
+        st.markdown(
+            '<div style="margin-bottom:8px">'
+            '<span class="sf-panel-title">AI Composite Analysis</span></div>',
+            unsafe_allow_html=True,
+        )
     if text:
         PREVIEW = 300
         preview = text[:PREVIEW] + ("…" if len(text) > PREVIEW else "")
